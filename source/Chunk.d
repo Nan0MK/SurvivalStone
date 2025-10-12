@@ -20,7 +20,7 @@ void generateChunk(Block block){
 			while( x < chunkSize) {
 
 				if( y < 6) {
-					block.color = Colors.GRAY;
+					block.color = Colors.BROWN;
 				} else {
 					block.color = Colors.GREEN;
 				}
@@ -44,44 +44,44 @@ void generateChunk(Block block){
 	// DrawCubeV(block.pos, block.size, block.color);
 }
 
-BlockV2[] generateChunk(){
-	BlockV2[] chunkOut;
+// BlockV2[] generateChunk(){
+// 	BlockV2[] chunkOut;
 
-	int chunkSize = 9;
-	int debugSize = 0;
+// 	int chunkSize = 9;
+// 	int debugSize = 0;
 
-	int gap = 2;
+// 	int gap = 2;
 
-	int z = 0;
-	while(z < chunkSize){
+// 	int z = 0;
+// 	while(z < chunkSize){
 
-		int y = 0;
-		while(y < chunkSize){
+// 		int y = 0;
+// 		while(y < chunkSize){
 
-			int x = 0;
-			while( x < chunkSize) {
-				Color setclr;
+// 			int x = 0;
+// 			while( x < chunkSize) {
+// 				Color setclr;
 
-				if( y < 6) {
-					setclr = Colors.GRAY;
-				} else {
-					setclr = Colors.GREEN;
-				}
+// 				if( y < 6) {
+// 					setclr = Colors.GRAY;
+// 				} else {
+// 					setclr = Colors.GREEN;
+// 				}
 
-                // Convert to working for BlockV2
+//                 // Convert to working for BlockV2
 
-				int px = (gap + debugSize) * x;
-				int py = (gap + debugSize) * y;
-				int pz = (gap + debugSize) * z;
-				BlockV2 block = new BlockV2(px, py, pz, false);
-				block.setcolor(setclr);
-				chunkOut ~= block;
+// 				int px = (gap + debugSize) * x;
+// 				int py = (gap + debugSize) * y;
+// 				int pz = (gap + debugSize) * z;
+// 				BlockV2 block = new BlockV2(px, py, pz, false);
+// 				block.setcolor(setclr);
+// 				chunkOut ~= block;
 
-				x = x + 1;
+// 				x = x + 1;
 
-			}
-			y = y + 1;
-		}
-		z = z + 1;
-	}
-}
+// 			}
+// 			y = y + 1;
+// 		}
+// 		z = z + 1;
+// 	}
+// }

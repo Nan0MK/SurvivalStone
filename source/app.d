@@ -1,15 +1,14 @@
 import std.stdio;
 import raylib;
 import Util;
+import Chunk;
 
 void game(){
 	validateRaylibBinding();
 
-	InitWindow(800, 600, "DLANG!");
+	InitWindow(1000, 800, "DLANG!");
 
-	// Block myBlock = Block.newblock(0, 0, 0);
-	// BlockV2 otherblock = new BlockV2(false);
-	BlockV2[] myChunk = generateChunk();
+	Block myBlock = Block.newBlock(0, 0, 0);
 
 	Camera cam;
 	cam.position = Vector3(10, 10, 10);
@@ -21,22 +20,16 @@ void game(){
 	while( ! WindowShouldClose){
 
 		UpdateCamera(&cam, CameraMode.CAMERA_FREE);
-		//camControls(cam);
+		camControls(cam);
 
 		BeginDrawing();
-
 
 		ClearBackground(Colors.BLACK);
 
 		BeginMode3D(cam); //______________
 
-		// generateChunk(myBlock);
-		// otherblock.drawWholeBlock();
-		foreach (BlockV2 block; myChunk){
-			block.drawWholeBlock();
-		}
-
-		// DrawGrid(16, myBlock.size.x);
+		generateChunk(myBlock);
+		DrawGrid(16, myBlock.size.x);
 
 		EndMode3D(); //______________
 
