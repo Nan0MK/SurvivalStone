@@ -21,5 +21,18 @@
 		"raylib"
 	],
 	"license": "proprietary",
-	"name": "survival-stone"
+	"name": "survival-stone",
+	"configurations": [
+		{
+			"name": "application",
+			"targetType": "executable",
+			"excludedSourceFiles": ["source/aiTest/*"]
+		},
+		{
+			"name": "aiTest",
+			"targetType": "executable",
+			"targetName": "ai-test",
+			"excludedSourceFiles": ["source/app.d"]
+		}
+	]
 }
