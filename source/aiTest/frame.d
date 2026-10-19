@@ -3,8 +3,10 @@ module aiTest.frame;
 import raylib;
 
 import block;
+import chunk;
 import gameDebug.camera;
 import gameDebug.hud;
+import player;
 
 import aiTest.check;
 
@@ -29,13 +31,16 @@ int checkFrame() {
 	camera.fovy = 45;
 	camera.projection = CameraProjection.CAMERA_PERSPECTIVE;
 
-	FreeCamera view;
+	Player view;
 	Vector3 workTarget = Vector3(0, 2.0f / 3.0f, 1.0f / 3.0f);
 	view.camera.position = Vector3(workTarget.x, workTarget.y, workTarget.z + 4);
-	view.camera.target = workTarget;
 	view.camera.up = Vector3(0, 1, 0);
 	view.camera.fovy = 45;
 	view.camera.projection = CameraProjection.CAMERA_PERSPECTIVE;
+	// Sync the target from yaw/pitch; settle is 0 only after two updates.
+	view.update();
+	view.update();
+	view.update();
 
 	Hud hud;
 	BeginDrawing();

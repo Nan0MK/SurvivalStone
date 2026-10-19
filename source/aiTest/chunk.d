@@ -5,6 +5,7 @@ import std.conv : to;
 import raylib;
 
 import block;
+import chunk;
 
 import aiTest.check;
 

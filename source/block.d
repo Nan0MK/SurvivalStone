@@ -1,7 +1,6 @@
 import std.stdio;
 
 import raylib;
-import raylib.rcamera;
 // import raylib.rlgl;
 
 
@@ -59,45 +58,26 @@ struct BlockMesh {
     }
 }
 
-struct Chunk {
-    const int chunkSize = 16;
-    const int chunkSize3D = chunkSize * chunkSize * chunkSize;
-    Vector3[chunkSize3D] blockData; /// should be 48
-    BlockMesh[chunkSize3D] meshData;
+enum BlockType {
+    NONE,
+    AIR,
+    TEST,
+}
 
-    /// X then Z then Y = Y{ Z{ X{placement} } }
-    void populateChunk() {
-        int i = chunkSize3D;
-        int y = chunkSize;
-        while(y > 0 ) {
-            int z = chunkSize;
-            while(z > 0) {
-                int x = chunkSize;
-                while(x > 0) {
-                    Vector3 blockPosition = Vector3(x, y, z);
-                    blockData[i - 1] = blockPosition;
-                    i -= 1;
-                    x -= 1;
-                }
-                z -= 1;
-            }
-            y -= 1;
-        }
-
-        int j = chunkSize3D - 1;
-        while(j > -1){
-            BlockMesh newMesh;
-            meshData[j] = newMesh;
-            j -= 1;
-        }
+int getBlockID(BlockType blockType) {
+    int idOut;
+    switch(blockType){
+        case BlockType.NONE:
+            idOut = 0;
+            break;
+        case BlockType.AIR:
+            idOut = 1;
+            break;
+        case BlockType.TEST:
+            idOut = 2;
+            break;
+        default:
+            break;
     }
-
-    void drawChunk() {
-        int i = chunkSize3D - 1;
-        while(i > -1){
-            Vector3 newOffset = blockData[i];
-            meshData[i].drawMesh(newOffset);
-            i -= 1;
-        }
-    }
+    return idOut;
 }

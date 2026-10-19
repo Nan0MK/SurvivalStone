@@ -3,13 +3,14 @@ import std.stdio;
 import raylib;
 
 import block;
-import gameDebug.camera;
+import chunk;
 import gameDebug.hud;
+import player;
 
 void main() {
 	writeln("SurvivalStone");
 	// BlockMesh myBlock;
-	Chunk myChunk;
+	Chunk2 myChunk;
 	myChunk.populateChunk();
 
 	InitWindow(1280, 720, "SurvivalStone");
@@ -17,7 +18,7 @@ void main() {
 	scope (exit)
 		CloseWindow();
 
-	FreeCamera view = FreeCamera.create();
+	Player view = Player.create();
 	Hud hud;
 
 	while (!WindowShouldClose()) {

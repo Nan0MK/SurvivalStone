@@ -4,17 +4,17 @@ import core.stdc.stdio : snprintf;
 
 import raylib;
 
-import gameDebug.camera;
+import player;
 
 struct Hud {
 	private string facing = "NORTH";
 
-	void draw(ref FreeCamera view) {
+	void draw(ref Player view) {
 		drawCompass(view);
 		drawCoordinates(view.camera.position);
 	}
 
-	private void drawCompass(ref FreeCamera view) {
+	private void drawCompass(ref Player view) {
 		string nextFacing = view.facingLabel();
 		if (nextFacing.length)
 			facing = nextFacing;
