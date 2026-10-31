@@ -1,17 +1,22 @@
 #!/bin/sh
 cat <<'EOF'
-SurvivalStone handoff, 2026-10-06
+SurvivalStone handoff, 2026-10-30
 
-Goal: player movement system is in. Waiting on the author for the next task.
+Goal: gravity and ground collision for the normal player. Debug flight stays free. That is in the game.
 
 Files touched:
-- source/player.d: new Player struct. WASD moves relative to facing, Space up, Shift down (not Ctrl), mouse turns via yaw/pitch it owns. Opens facing north, level.
-- source/app.d: uses Player instead of gameDebug FreeCamera.
-- source/gameDebug/hud.d: Hud.draw and drawCompass now take ref Player.
-- source/aiTest/frame.d: one-frame draw uses Player; gameDebug files unchanged otherwise.
-- PROGRESS.md updated.
+- source/player.d — moveWalk, surfaceAt, eyeHeight 2, gravity 24, jumpSpeed 10, stepHeight 1. The normal branch of stepLook calls moveWalk. Space jumps from the ground. setDebugMove clears velocityY.
+- source/gameDebug/camera.d — FreeCamera passes its own velocityY into stepLook, so the shared normal path can fall.
+- source/aiTest/camera.d — a fall leaves the air, landing stops on the surface, a jump starts upward and then slows, and a tall step blocks the stride. moveLook and moveDebug checks are unchanged.
+- PROGRESS.md, AGENT_LEARN.md — normal movement falls and lands. Debug flight does not.
 
-Unfinished: nothing assigned. The blockData comment still says "should be 48"; the arrays hold 4096. slowMove() is commented out in FreeCamera.update. Leave both unless the author asks. FreeCamera is unused by the game now; it stays for reference.
+What is true:
+- The camera is the eyes. The feet are 2 below it. The ground is the bilinear blend of the four integer terrain samples under the player.
+- A rise of more than 1 cancels that horizontal step. Gentler ground is walked up, then the feet snap to it.
+- Debug movement still flies along the look. Space climbs, Shift descends, and the body does not collide.
+- The checks passed: dub build, then dub run --config=aiTest, which printed aiTest ok.
 
-Next: read AGENTS.md, PROGRESS.md, and AGENT_LEARN.md. Wait for the author. When you test or review, run dub run --config=aiTest yourself (currently prints "aiTest ok"). Do not ask the author to run it.
+Unfinished: Chunk2 face culling. When the author asks, store blocks with chunkIndex(x - 1, y - 1, z - 1), and draw EAST only when chunkData[i] is TEST and getNeighbor(i, EAST) is not. The blockData comment still says "should be 48". Leave it unless the author asks. Do not add a day/night cycle, digging, a mesh batcher, or more materials unless they ask.
+
+Next: read AGENTS.md, PROGRESS.md, and AGENT_LEARN.md. Wait for the author. When you test or review, run dub run --config=aiTest yourself. Do not ask the author to run it.
 EOF

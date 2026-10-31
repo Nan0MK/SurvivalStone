@@ -1,6 +1,7 @@
 # SurvivalStone
 
-SurvivalStone is a voxel survival game with crafting and mechanics that players are meant to be able to exploit. The author is writing most of it by hand, in D and raylib, to learn graphics programming. Help with the task you were given. Do not take over the project.
+SurvivalStone is a voxel survival game with crafting and mechanics that players are meant to be able to exploit. The author is writing some of it by hand, in D and raylib, to learn game programming. Help with the task you were given. Do not take over the project.
+You will be working along side him in this project.
 
 ## Do only the task
 

@@ -1,8 +1,14 @@
 module aiTest.camera;
 
+import std.conv : to;
+import std.math : sin, cos, sqrt;
+
 import raylib;
 
+import chunkSmooth;
 import gameDebug.camera;
+import gameDebug.hud;
+import player;
 
 import aiTest.check;
 
@@ -31,5 +37,164 @@ int checkCamera() {
 	facing("UP", Vector3(0, 0, 0), Vector3(0, 4, -1), "steep up");
 	facing("NORTH", Vector3(0, 0, 0), Vector3(0, -1, -1), "45 down");
 	facing("DOWN", Vector3(0, 0, 0), Vector3(0, -4, -1), "steep down");
+
+	// The label comes from the look vector, not from raylib's camera helper.
+	Player body;
+	body.camera.position = Vector3(0, 0, 4);
+	body.camera.target = Vector3(0, 0, 0);
+	report.expect(body.facingLabel() == "NORTH", "player faces the same way");
+
+	Camera3D aimed;
+	aimed.position = Vector3(0, 0, 4);
+	aimLook(aimed, 0, 0);
+	report.expect(closeTo(aimed.target.x, 0) && closeTo(aimed.target.y, 0) && closeTo(aimed.target.z, 3), "yaw 0 looks north");
+	report.expect(facingOf(aimed.target - aimed.position) == "NORTH", "aimed north");
+
+	Vector3 moved = Vector3(0, 0, 0);
+	moveLook(moved, 0, 1, 0, 0, 1);
+	report.expect(closeTo(moved.x, 0) && closeTo(moved.y, 0) && closeTo(moved.z, -moveSpeed), "W at yaw 0 goes north");
+	moved = Vector3(0, 0, 0);
+	moveLook(moved, 0, 0, 1, 0, 1);
+	report.expect(closeTo(moved.x, moveSpeed) && closeTo(moved.z, 0), "D at yaw 0 goes east");
+	moved = Vector3(0, 0, 0);
+	moveLook(moved, 0, 0, 0, 1, 1);
+	report.expect(closeTo(moved.y, moveSpeed), "space goes up");
+	moved = Vector3(0, 0, 0);
+	moveLook(moved, 0, 0, 0, -1, 1);
+	report.expect(closeTo(moved.y, -moveSpeed), "shift goes down");
+	moved = Vector3(0, 0, 0);
+	moveLook(moved, 0, 1, 1, 0, 1);
+	immutable diagonal = sqrt(moved.x * moved.x + moved.z * moved.z);
+	report.expect(closeTo(diagonal, moveSpeed), "W and D together stay at move speed");
+
+	Vector3 falling = Vector3(2, 80, 2);
+	float fallSpeed = 0;
+	moveWalk(falling, fallSpeed, 0, 0, 0, false, 0.5f);
+	report.expect(falling.y < 80 && fallSpeed < 0, "gravity pulls the normal player down");
+
+	float floorY = surfaceAt(3, 5) + eyeHeight;
+	Vector3 landed = Vector3(3, floorY - 4, 5);
+	float landSpeed = -8;
+	moveWalk(landed, landSpeed, 0, 0, 0, false, 0.1f);
+	report.expect(closeTo(landed.y, surfaceAt(landed.x, landed.z) + eyeHeight), "the player lands on the ground");
+	report.expect(closeTo(landSpeed, 0), "landing stops the fall");
+
+	Vector3 jumper = Vector3(3, floorY, 5);
+	float jumpSpeedY = 0;
+	moveWalk(jumper, jumpSpeedY, 0, 0, 0, true, 0.05f);
+	report.expect(jumper.y > floorY && jumpSpeedY > 0, "space jumps from the ground");
+	float rising = jumpSpeedY;
+	moveWalk(jumper, jumpSpeedY, 0, 0, 0, true, 0.05f);
+	report.expect(jumpSpeedY < rising, "gravity slows a jump in the air");
+
+	int cliff = 0;
+	int cliffZ = 0;
+	bool haveCliff = false;
+	int scanZ = -30;
+	while (scanZ <= 30 && !haveCliff) {
+		int scanX = -80;
+		while (scanX < 160) {
+			if (groundHeight(scanX + 1, scanZ) > groundHeight(scanX, scanZ) + stepHeight + 0.5f) {
+				cliff = scanX;
+				cliffZ = scanZ;
+				haveCliff = true;
+				break;
+			}
+			scanX += 1;
+		}
+		scanZ += 1;
+	}
+	report.expect(haveCliff, "the ground has a step taller than a stride");
+	if (haveCliff) {
+		float standX = cast(float) cliff + 0.1f;
+		float standZ = cast(float) cliffZ + 0.05f;
+		float standY = surfaceAt(standX, standZ) + eyeHeight;
+		Vector3 blocked = Vector3(standX, standY, standZ);
+		float blockedSpeed = 0;
+		moveWalk(blocked, blockedSpeed, 0, 0, 1, false, 0.2f);
+		report.expect(closeTo(blocked.x, standX) && closeTo(blocked.z, standZ), "a tall step stops the normal player");
+	}
+
+	float yaw = 0, pitch = 0;
+	turnLook(yaw, pitch, 0, 1000);
+	report.expect(pitch == -pitchLimit, "look down stops short of straight down");
+	yaw = 0;
+	pitch = 0;
+	turnLook(yaw, pitch, 0, -1000);
+	report.expect(pitch == pitchLimit, "look up stops short of straight up");
+
+	// Debug flight uses the look. At pitch 0 that look is the same north vector as moveLook.
+	immutable float pitched = 0.5f;
+	Vector3 flown = Vector3(0, 0, 0);
+	moveDebug(flown, 0, 0, 1, 0, 0, 1);
+	report.expect(closeTo(flown.x, 0) && closeTo(flown.y, 0) && closeTo(flown.z, -moveSpeed), "debug W at pitch 0 goes north");
+	flown = Vector3(0, 0, 0);
+	moveDebug(flown, 0, pitched, 1, 0, 0, 1);
+	report.expect(closeTo(flown.x, 0), "pitched debug W stays on x");
+	report.expect(closeTo(flown.y, sin(pitched) * moveSpeed), "pitched debug W climbs");
+	report.expect(closeTo(flown.z, -cos(pitched) * moveSpeed), "pitched debug W still heads north");
+	Vector3 walked = Vector3(0, 0, 0);
+	moveLook(walked, 0, 1, 0, 0, 1);
+	report.expect(closeTo(walked.y, 0) && closeTo(walked.z, -moveSpeed), "normal W ignores pitch and stays on the ground");
+	flown = Vector3(0, 0, 0);
+	moveDebug(flown, 0, pitched, 0, 1, 0, 1);
+	report.expect(closeTo(flown.x, moveSpeed) && closeTo(flown.y, 0) && closeTo(flown.z, 0), "debug D stays east on the ground");
+	flown = Vector3(0, 0, 0);
+	moveDebug(flown, 0, pitched, 1, 1, 0, 1);
+	immutable flownLength = sqrt(flown.x * flown.x + flown.y * flown.y + flown.z * flown.z);
+	report.expect(closeTo(flownLength, moveSpeed), "pitched debug W and D stay at move speed");
+
+	Camera3D pitchedAim;
+	pitchedAim.position = Vector3(0, 0, 4);
+	aimLook(pitchedAim, 0, pitched);
+	Vector3 aimStep = pitchedAim.target - pitchedAim.position;
+	report.expect(closeTo(aimStep.x, 0) && closeTo(aimStep.y, sin(pitched)) && closeTo(aimStep.z, -cos(pitched)), "aim uses the same pitched look");
+
+	Player bodyFlags;
+	report.expect(!bodyFlags.debugMovement(), "debug movement starts off");
+	bodyFlags.setDebugMove(true);
+	report.expect(bodyFlags.debugMovement(), "debug movement turns on");
+
+	PauseMenu menu;
+	report.expect(menu.renderDistance == chunkRadius && chunkRadius == 20, "render distance starts at 20");
+	menu.open = true;
+	Rectangle debugRow = menu.debugRowAt(1280, 720);
+	Vector2 onDebug = Vector2(debugRow.x + debugRow.width / 2, debugRow.y + debugRow.height / 2);
+	report.expect(CheckCollisionPointRec(onDebug, debugRow), "debug row contains its center");
+	bool closed = menu.press(onDebug, 1280, 720);
+	report.expect(!closed && menu.open && menu.debugMove, "debug row turns movement on");
+	closed = menu.press(onDebug, 1280, 720);
+	report.expect(!closed && menu.open && !menu.debugMove, "debug row turns movement off");
+
+	int choice = 0;
+	int[4] want = [10, 20, 40, 100];
+	while (choice < 4) {
+		Rectangle button = menu.renderChoiceAt(choice, 1280, 720);
+		Vector2 onChoice = Vector2(button.x + button.width / 2, button.y + button.height / 2);
+		report.expect(!CheckCollisionPointRec(onChoice, debugRow), "a distance choice is not the debug row");
+		closed = menu.press(onChoice, 1280, 720);
+		report.expect(!closed && menu.open && menu.renderDistance == want[choice], "distance choice " ~ to!string(want[choice]));
+		choice += 1;
+	}
+	report.expect(!menu.debugMove, "a distance choice leaves debug movement off");
+
+	Rectangle resumeRow = menu.resumeRowAt(1280, 720);
+	Vector2 onResume = Vector2(resumeRow.x + 2, resumeRow.y + 2);
+	report.expect(!CheckCollisionPointRec(onResume, debugRow), "resume is not the debug row");
+	closed = menu.press(onResume, 1280, 720);
+	report.expect(closed && !menu.open && !menu.debugMove, "resume closes the menu");
+
+	menu.open = true;
+	closed = menu.press(Vector2(0, 0), 1280, 720);
+	report.expect(!closed && menu.open, "a click outside the rows leaves the menu open");
+	menu.open = false;
+	closed = menu.press(onDebug, 1280, 720);
+	report.expect(!closed && !menu.open && !menu.debugMove, "a click does nothing while the menu is closed");
+
 	return report.failed;
+}
+
+bool closeTo(float a, float b) {
+	float d = a - b;
+	return d < 0.001f && d > -0.001f;
 }

@@ -79,6 +79,7 @@ struct Chunk2 {
         return x + y*chunkSize + z*chunkSize * chunkSize;
     }
 
+    // Check if in chunk
     bool inChunk(int x, int y, int z) {
         return x >= 0 && x < chunkSize &&
                y >= 0 && y < chunkSize &&
@@ -133,7 +134,7 @@ struct Chunk2 {
     void drawChunk() {
         int i = 0;
         while(i < chunkSize3D){
-            if(getNeighbor(i, WEST) != getBlockID(BlockType.TEST) ){
+            if(getNeighbor(i, EAST) != getBlockID(BlockType.TEST) ){
                 Vector3 newOffset = Vector3(xOut(i), yOut(i), zOut(i));
                 chunkMesh[i].drawEAST(newOffset);
             }

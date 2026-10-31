@@ -10,7 +10,7 @@ import player;
 
 import aiTest.check;
 
-// One hidden frame of the chunk, grid, compass, and coordinate panel.
+// One hidden frame of the chunk, grid, compass, coordinate panel, and pause menu.
 int checkFrame() {
 	Report report;
 	SetConfigFlags(ConfigFlags.FLAG_WINDOW_HIDDEN);
@@ -43,6 +43,9 @@ int checkFrame() {
 	view.update();
 
 	Hud hud;
+	PauseMenu menu;
+	menu.open = true;
+	menu.debugMove = true;
 	BeginDrawing();
 	ClearBackground(Colors.BLACK);
 	BeginMode3D(camera);
@@ -50,6 +53,7 @@ int checkFrame() {
 	DrawGrid(10, 1);
 	EndMode3D();
 	hud.draw(view);
+	menu.draw();
 	EndDrawing();
 	return report.failed;
 }
