@@ -67,10 +67,14 @@ int checkCamera() {
 	immutable diagonal = sqrt(moved.x * moved.x + moved.z * moved.z);
 	report.expect(closeTo(diagonal, moveSpeed), "W and D together stay at move speed");
 
-	Vector3 falling = Vector3(2, 80, 2);
+	report.expect(eyeHeight == 2.0f && stepHeight == 1.0f && moveSpeed == 4.0f, "the player keeps its size");
+	report.expect(closeTo(surfaceAt(3.5f, 5.25f), groundHeightAt(3.5f, 5.25f)), "the feet use the same height as the mesh");
+
+	float fallFrom = surfaceAt(2, 2) + eyeHeight + 30;
+	Vector3 falling = Vector3(2, fallFrom, 2);
 	float fallSpeed = 0;
 	moveWalk(falling, fallSpeed, 0, 0, 0, false, 0.5f);
-	report.expect(falling.y < 80 && fallSpeed < 0, "gravity pulls the normal player down");
+	report.expect(falling.y < fallFrom && fallSpeed < 0, "gravity pulls the normal player down");
 
 	float floorY = surfaceAt(3, 5) + eyeHeight;
 	Vector3 landed = Vector3(3, floorY - 4, 5);
@@ -90,19 +94,25 @@ int checkCamera() {
 	int cliff = 0;
 	int cliffZ = 0;
 	bool haveCliff = false;
-	int scanZ = -30;
-	while (scanZ <= 30 && !haveCliff) {
-		int scanX = -80;
-		while (scanX < 160) {
-			if (groundHeight(scanX + 1, scanZ) > groundHeight(scanX, scanZ) + stepHeight + 0.5f) {
-				cliff = scanX;
-				cliffZ = scanZ;
-				haveCliff = true;
-				break;
+	int scanZ = -2048;
+	while (scanZ <= 2048 && !haveCliff) {
+		int scanX = -4096;
+		while (scanX < 4096 && !haveCliff) {
+			if (groundHeight(scanX + 8, scanZ) > groundHeight(scanX, scanZ) + stepHeight + 0.5f) {
+				int fine = scanX;
+				while (fine < scanX + 8) {
+					if (groundHeight(fine + 1, scanZ) > groundHeight(fine, scanZ) + stepHeight + 0.5f) {
+						cliff = fine;
+						cliffZ = scanZ;
+						haveCliff = true;
+						break;
+					}
+					fine += 1;
+				}
 			}
-			scanX += 1;
+			scanX += 8;
 		}
-		scanZ += 1;
+		scanZ += 8;
 	}
 	report.expect(haveCliff, "the ground has a step taller than a stride");
 	if (haveCliff) {
@@ -143,6 +153,9 @@ int checkCamera() {
 	moveDebug(flown, 0, pitched, 1, 1, 0, 1);
 	immutable flownLength = sqrt(flown.x * flown.x + flown.y * flown.y + flown.z * flown.z);
 	report.expect(closeTo(flownLength, moveSpeed), "pitched debug W and D stay at move speed");
+	flown = Vector3(0, 0, 0);
+	moveDebug(flown, 0, 0, 1, 0, 0, 1, debugFast);
+	report.expect(closeTo(flown.x, 0) && closeTo(flown.y, 0) && closeTo(flown.z, -moveSpeed * debugFast), "left ctrl speeds debug flight");
 
 	Camera3D pitchedAim;
 	pitchedAim.position = Vector3(0, 0, 4);
@@ -167,8 +180,8 @@ int checkCamera() {
 	report.expect(!closed && menu.open && !menu.debugMove, "debug row turns movement off");
 
 	int choice = 0;
-	int[4] want = [10, 20, 40, 100];
-	while (choice < 4) {
+	int[6] want = [10, 20, 40, 100, 200, 500];
+	while (choice < 6) {
 		Rectangle button = menu.renderChoiceAt(choice, 1280, 720);
 		Vector2 onChoice = Vector2(button.x + button.width / 2, button.y + button.height / 2);
 		report.expect(!CheckCollisionPointRec(onChoice, debugRow), "a distance choice is not the debug row");

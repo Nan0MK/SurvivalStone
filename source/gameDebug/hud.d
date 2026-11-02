@@ -46,7 +46,7 @@ struct Hud {
 	}
 }
 
-private enum int pausePanelW = 420;
+private enum int pausePanelW = 560;
 private enum int pauseRowH = 44;
 private enum int pauseRowGap = 12;
 private enum int pauseInset = 28;
@@ -57,14 +57,14 @@ private enum int pauseLabelTop = pauseDebugTop + pauseRowH + pauseRowGap;
 private enum int pauseChoicesTop = pauseLabelTop + pauseLabelH;
 private enum int pauseResumeTop = pauseChoicesTop + pauseRowH + pauseRowGap;
 private enum int pausePanelH = pauseResumeTop + pauseRowH + pauseInset;
-private enum int[4] renderChoices = [10, 20, 40, 100];
+private enum int[6] renderChoices = [10, 20, 40, 100, 200, 500];
 
 private Rectangle pausePanelAt(int screenW, int screenH) {
 	return Rectangle((screenW - pausePanelW) / 2, (screenH - pausePanelH) / 2, pausePanelW, pausePanelH);
 }
 
 // Escape opens this. Debug movement is the fly-along-look option. Resume closes it.
-// Render distance is one of 10, 20, 40, or 100 chunks. The default is chunkRadius.
+// Render distance is one of 10, 20, 40, 100, 200, or 500 chunks. The default is chunkRadius.
 struct PauseMenu {
 	bool open;
 	bool debugMove;

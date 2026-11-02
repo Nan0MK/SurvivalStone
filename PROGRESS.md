@@ -50,3 +50,26 @@ Unfinished: `Chunk2` face culling, still the author's fix when they ask. No digg
 - Same day: the default render distance is 20 chunks. The pause menu has Render distance choices 10, 20, 40, and 100. The selected one is the lighter button. `app.d` copies that value onto `world.radius` before each update. A smaller distance drops the outside chunks on the next update. A larger distance keeps filling one chunk per frame. Verified: `dub build` and `aiTest ok`.
 - Same day: terrain height is altitude, then ledges, then detail. Detail is added after the ledge wave, so it does not reshape the steps. Altitude is one noise feature across 256 chunks, with a swing of 160 around 28. The base barely moves inside one chunk and rises and falls over hundreds of chunks. Verified: `dub build` and `aiTest ok`.
 - Same day: the normal player has gravity and ground collision. `moveWalk` falls, lands on the bilinear ground height, jumps with Space from the ground, and stops at a step taller than 1. The eyes stay 2 above the feet. Debug flight is unchanged: no gravity, no collision, Space up, Shift down. Verified: `dub build` and `aiTest ok`.
+
+## 2026-10-31
+
+Finer marching cubes. The player stays the same size.
+
+- `source/chunkSmooth.d`: `cubesPerUnit` is 2. A chunk is still 16 world units, with 32 cubes and 33 samples. Each cube is half a unit. `populateTerrain` samples `groundHeightAt` at those positions. The face shared with the next chunk is still world position 16.
+- `source/player.d`: `surfaceAt` returns `groundHeightAt`, so the feet follow that surface. `eyeHeight` is still 2, `stepHeight` is still 1, `moveSpeed` is still 4, `jumpSpeed` is still 10, and `gravity` is still 24.
+- `source/app.d`: the spawn height calls `groundHeight`. It does not put a chunk on the stack.
+- `source/aiTest/smooth.d`: the grid checks use the half-unit samples. The flat sheet stays at world y = 4 and has 32×32×2 triangles. The one-corner edges sit at 0.25.
+- Verified: `dub build` succeeds. `dub run --config=aiTest` prints `aiTest ok`.
+- Same day: a triangle is drawn only when the camera can see it. `drawChunk` skips a triangle that is outside the view, and a triangle that faces away from the camera. A triangle that crosses the edge of the view is still drawn. Chunks outside the view were already skipped. Verified: `dub build` and `aiTest ok`.
+
+- Same day: terrain detail follows distance. Within 2 chunks the cells stay half a unit. Through 6 chunks they are one unit. Farther out they are two units. Walking closer rebuilds a chunk finer, and walking away rebuilds it coarser, one chunk per update. A side that meets a different detail grows a skirt 8 units down so the seam stays covered. The feet still use `groundHeightAt`. Verified: `dub build` and `aiTest ok`.
+
+- Same day: the window clears to sky blue. `app.d` calls `ClearBackground(Colors.SKYBLUE)`. Verified: `dub build` succeeds.
+- Same day: detail bumps are scaled by 1.5 instead of 3.5. Ledge noise scale is 0.01 instead of 0.03, so a step covers several chunks. The step shape is unchanged: flat, then a rise at the end. Verified: `dub run --config=aiTest` prints `aiTest ok`.
+- Same day: the terrain illustration now has five curves. Height is altitude, then ranges, then ledges, then detail. Ranges are smooth hills with a swing of 40 across 48 chunks. Ledges are a steep rise and a long slope down, peaking at 8. Detail is the jagged noise times 1.5 times `detailIntensityAt`, a smooth 0..1 wave. Verified: `dub run --config=aiTest` prints `aiTest ok`.
+- Same day: ledges are scaled by two more smooth waves, in the same family as detail intensity. `ledgeIntensityAt` covers 32 chunks and scales how tall a scarp is. `ledgeChanceAt` covers 48 chunks and fades scarps out where it is low. Each maps Perlin one-to-one into 0..1 and then squares it, so a high stretch is a full ledge and a low stretch stays quiet. `ledgesAt` is the unscaled scarp times those two. The scarp still peaks at 8 before that scale. Verified: `dub run --config=aiTest` prints `aiTest ok`. `dub build` succeeds.
+- Same day: the pause menu render distance choices are 10, 20, 40, 100, 200, and 500. The panel is wider so the six buttons fit on one row. In debug flight, holding left ctrl multiplies speed by `debugFast` (8). Walking stays at `moveSpeed` 4. Verified: `dub run --config=aiTest` prints `aiTest ok`. `dub build` succeeds.
+- Same day: ranges were a ±40 ripple across 48 chunks, almost flat at the spawn, so they disappeared into the altitude. `rangesAt` is now a rounded mountain: near 0 in a valley, about 120 on a crest, about 16 chunks across. Verified: `dub run --config=aiTest` prints `aiTest ok`. `dub build` succeeds.
+- Same day: that round hill was the wrong shape. `rangeWave` is a giant ledge: a steep climb of 300, a drop of 75 that is a little less steep, then a long slope back to the plain. A steep face of that shape stands just east of the spawn. Verified: `dub run --config=aiTest` prints `aiTest ok`. `dub build` succeeds.
+
+Unfinished: `Chunk2` face culling, still the author's fix when they ask. No digging, no day/night cycle, no mesh batcher, and no more materials unless they ask. The finer grid draws more triangles, so a frame is heavier. Leave that until they ask.

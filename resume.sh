@@ -1,22 +1,23 @@
 #!/bin/sh
 cat <<'EOF'
-SurvivalStone handoff, 2026-10-30
+SurvivalStone handoff, 2026-10-31
 
-Goal: gravity and ground collision for the normal player. Debug flight stays free. That is in the game.
+Goal: make ranges a giant ledge, not a round hill. That is in the game.
 
 Files touched:
-- source/player.d — moveWalk, surfaceAt, eyeHeight 2, gravity 24, jumpSpeed 10, stepHeight 1. The normal branch of stepLook calls moveWalk. Space jumps from the ground. setDebugMove clears velocityY.
-- source/gameDebug/camera.d — FreeCamera passes its own velocityY into stepLook, so the shared normal path can fall.
-- source/aiTest/camera.d — a fall leaves the air, landing stops on the surface, a jump starts upward and then slows, and a tall step blocks the stride. moveLook and moveDebug checks are unchanged.
-- PROGRESS.md, AGENT_LEARN.md — normal movement falls and lands. Debug flight does not.
+- source/chunkSmooth.d — rangeWave climbs 300 on a steep face, drops 75 on a slope a little less steep, then slopes gradually back to 0. rangesAt slides Perlin along that shape. A steep face is just east of the spawn, near x=96.
+- source/aiTest/smooth.d — checks the three parts of rangeWave, and that a face in the world climbs hundreds and is steep.
+- source/aiTest/camera.d — the gravity check starts above the local ground, because the spawn now sits up on a range.
+- AGENT_LEARN.md — the range shape.
 
 What is true:
-- The camera is the eyes. The feet are 2 below it. The ground is the bilinear blend of the four integer terrain samples under the player.
-- A rise of more than 1 cancels that horizontal step. Gentler ground is walked up, then the feet snap to it.
-- Debug movement still flies along the look. Space climbs, Shift descends, and the body does not collide.
-- The checks passed: dub build, then dub run --config=aiTest, which printed aiTest ok.
+- The spawn is already up on a range, near the start of the long slope. The wall is a short way east.
+- Ledges are still the small scarp times ledgeIntensityAt times ledgeChanceAt.
+- The pause menu distances are 10, 20, 40, 100, 200, and 500. Holding left ctrl in debug flight multiplies speed by debugFast (8).
+- The window clears to Colors.SKYBLUE. Detail follows distance. The player size is unchanged.
+- The checks passed: dub run --config=aiTest printed aiTest ok. dub build succeeded.
 
-Unfinished: Chunk2 face culling. When the author asks, store blocks with chunkIndex(x - 1, y - 1, z - 1), and draw EAST only when chunkData[i] is TEST and getNeighbor(i, EAST) is not. The blockData comment still says "should be 48". Leave it unless the author asks. Do not add a day/night cycle, digging, a mesh batcher, or more materials unless they ask.
+Unfinished: Chunk2 face culling. When the author asks, store blocks with chunkIndex(x - 1, y - 1, z - 1), and draw EAST only when chunkData[i] is TEST and getNeighbor(i, EAST) is not. Leave that unless the author asks.
 
 Next: read AGENTS.md, PROGRESS.md, and AGENT_LEARN.md. Wait for the author. When you test or review, run dub run --config=aiTest yourself. Do not ask the author to run it.
 EOF

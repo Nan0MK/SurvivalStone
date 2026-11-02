@@ -9,6 +9,8 @@ import chunkSmooth;
 // Mouse look and WASD movement, written here. Not raylib's UpdateCamera.
 enum float lookSpeed = 0.0025f;
 enum float moveSpeed = 4.0f;
+// Debug flight only. Holding left ctrl multiplies moveSpeed by this.
+enum float debugFast = 8.0f;
 enum float pitchLimit = 1.5707f - 0.01f;
 // The camera sits this far above the feet. Spawn uses the same offset.
 enum float eyeHeight = 2.0f;
@@ -68,17 +70,9 @@ void moveLook(ref Vector3 position, float yaw, float forward, float strafe, floa
 	position.z += dz * step;
 }
 
-// Height of the ground under a point. The four integer samples are the ones the mesh uses.
+// Height of the ground under a point. Same function the marching cubes sample.
 float surfaceAt(float x, float z) {
-	int x0 = floorInt(x);
-	int z0 = floorInt(z);
-	float tx = x - cast(float) x0;
-	float tz = z - cast(float) z0;
-	float h00 = groundHeight(x0, z0);
-	float h10 = groundHeight(x0 + 1, z0);
-	float h01 = groundHeight(x0, z0 + 1);
-	float h11 = groundHeight(x0 + 1, z0 + 1);
-	return h00 + (h10 - h00) * tx + (h01 - h00) * tz + (h00 - h10 - h01 + h11) * tx * tz;
+	return groundHeightAt(x, z);
 }
 
 // Normal movement. WASD stays on the ground plane. Space jumps from the ground.
@@ -106,7 +100,8 @@ void moveWalk(ref Vector3 position, ref float velocityY, float yaw, float forwar
 }
 
 // Debug flight follows the look, including pitch. Strafe uses the same ground right as moveLook.
-void moveDebug(ref Vector3 position, float yaw, float pitch, float forward, float strafe, float vertical, float dt) {
+// speedScale is 1 at the normal rate. Left ctrl passes debugFast.
+void moveDebug(ref Vector3 position, float yaw, float pitch, float forward, float strafe, float vertical, float dt, float speedScale = 1.0f) {
 	immutable look = lookDirection(yaw, pitch);
 	GroundAxes axes = groundAxes(yaw);
 	float dx = look.x * forward + axes.rightX * strafe;
@@ -118,7 +113,7 @@ void moveDebug(ref Vector3 position, float yaw, float pitch, float forward, floa
 		dy /= length;
 		dz /= length;
 	}
-	immutable step = moveSpeed * dt;
+	immutable step = moveSpeed * speedScale * dt;
 	position.x += dx * step;
 	position.y += dy * step;
 	position.z += dz * step;
@@ -172,9 +167,12 @@ void stepLook(ref Camera3D camera, ref float yaw, ref float pitch, ref int settl
 			vertical += 1;
 		if (IsKeyDown(KeyboardKey.KEY_LEFT_SHIFT) || IsKeyDown(KeyboardKey.KEY_RIGHT_SHIFT))
 			vertical -= 1;
-		if (debugMove)
-			moveDebug(camera.position, yaw, pitch, forward, strafe, vertical, GetFrameTime());
-		else
+		if (debugMove) {
+			float speedScale = 1.0f;
+			if (IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL))
+				speedScale = debugFast;
+			moveDebug(camera.position, yaw, pitch, forward, strafe, vertical, GetFrameTime(), speedScale);
+		} else
 			moveWalk(camera.position, velocityY, yaw, forward, strafe, IsKeyPressed(KeyboardKey.KEY_SPACE), GetFrameTime());
 	}
 	aimLook(camera, yaw, pitch);

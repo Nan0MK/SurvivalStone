@@ -50,7 +50,7 @@ The east face of a solid block is covered by the block at x+1. The west face is 
 
 ## A smooth chunk has one more sample than it has cubes
 
-Marching cubes builds each cube from the sample at `(x, y, z)` and the sample at `(x+1, y+1, z+1)`. A chunk of 16 cubes needs samples `0` through `16`, so `sampleCount` is `17` and the volume is `17 * 17 * 17` = 4913. The index is `x + y*17 + z*17*17`. Index 0 is `(0, 0, 0)`. Index 4912 is `(16, 16, 16)`.
+Marching cubes builds each cube from the sample at `(x, y, z)` and the sample at `(x+1, y+1, z+1)`. A chunk is still 16 world units. `cubesPerUnit` is 2, so the chunk holds 32 cubes and 33 samples, and `sampleStep` is 0.5. A sample's position inside the chunk is its index times 0.5. The index is `x + y*33 + z*33*33`. The volume is `33 * 33 * 33` = 35937. Index 0 is `(0, 0, 0)`. Index 35936 is `(32, 32, 32)`, at local position 16. The player eye (2), step (1), and move speed (4) are not scaled with that grid.
 
 A corner is inside the ground when its density is greater than the isolevel (`0`). The triangle normal points away from that inside corner. One inside corner at `(0, 0, 0)`, with the other seven corners outside, makes one triangle whose normal points toward `+X`, `+Y`, and `+Z`.
 
@@ -58,7 +58,7 @@ A corner is inside the ground when its density is greater than the isolevel (`0`
 
 `perlin2(0, 0)` and `perlin2(3, 5)` are 0. A height of `perlin2(x, z)` at integer coordinates is a flat sheet. Each terrain layer scales the coordinate and adds a shift, so the samples land inside the noise cells.
 
-`terrainHeight` builds `altitudeAt`, then adds `ledgesAt`, then adds `detailAt`. Detail is not passed through the ledge wave, so the steps stay steps and the bumps sit on them. Altitude is one Perlin feature across 256 chunks, centered at 28 with a swing of 160, so the base rises and falls over hundreds of chunks and barely moves inside one chunk. Detail is jagged, and it is 0 where its mask is low. `ledgeWave` keeps most of a step near the floor and packs the rise into the end of the step. A solid sample's material is `terrainMaterial`, another Perlin sample, not the depth and not the old rock patch.
+`terrainHeight` follows the terrain illustration from the bottom up: `altitudeAt`, then `rangesAt`, then `ledgesAt`, then `detailAt`. Detail is not passed through the ledge wave, so the scarps stay scarps and the bumps sit on them. Altitude is one Perlin feature across 256 chunks, centered at 28 with a swing of 160. Ranges are giant ledges on the altitude. `rangeWave` climbs 300 on a steep face, drops 75 on a slope a little less steep, then slopes gradually back to 0. The round hill of about 120 is gone. `detailIntensityAt` is a smooth 0..1 wave across 24 chunks, and detail is the jagged noise times 1.5 times that intensity. `ledgeWave` is a steep rise and then a long slope down, peaking at 8, three times across the noise. The ledge noise scale is 0.01, so those scarps sit several chunks apart. `ledgeIntensityAt` (32 chunks) and `ledgeChanceAt` (48 chunks) are the same kind of wave. Each uses `n + 0.5`, clamped to 0..1, then squared. Half-scale (`n * 0.5 + 0.5`) leaves the product of the two under a stride, so no ledge stops the player. `ledgesAt` is `ledgeShapeAt` times those two waves. A solid sample's material is `terrainMaterial`, another Perlin sample, not the depth and not the old rock patch.
 
 ## Smooth color reads the material, not the height
 
@@ -72,11 +72,15 @@ The color passed to `DrawTriangle3D` is the final color. `shadeColor` multiplies
 
 `cast(int)-0.1` is `0`, and `-17 / 16` is `-1`, because both truncate toward 0. The chunk just west of the origin is `-1`, and the chunk that contains `-17` is `-2`. `chunkCoord` floors first. `0` through `15.9` are chunk `0`. `16` is chunk `1`. `-0.1` and `-16` are chunk `-1`. `-16.1` is chunk `-2`.
 
-The sample at local `x = 16` of one chunk is the sample at local `x = 0` of the next. Both must read the height at the same world position, or the seam splits.
+The sample at local position 16 of one chunk is index `sampleCount - 1`. It is the sample at local position 0 of the next chunk. Both must read the height at the same world position, or the seam splits.
 
-`chunkRadius` is the render distance in chunks on x and on z. The default is 20. The pause menu can set it to 10, 20, 40, or 100. A world loads the surface layers in that square. It does not allocate a cube of empty chunks on y. A column whose highest sample sits exactly on a chunk boundary keeps the lower layer. That upper layer would have no solid samples.
+`chunkRadius` is the render distance in chunks on x and on z. The default is 20. The pause menu can set it to 10, 20, 40, 100, 200, or 500. A world loads the surface layers in that square. It does not allocate a cube of empty chunks on y. A column whose highest sample sits exactly on a chunk boundary keeps the lower layer. That upper layer would have no solid samples.
 
-`ChunkWorld.update` meshes one missing chunk and returns. The first call builds the surface layer of the player's column nearest the player's y. Later calls move outward one ring at a time. Chunks past the radius are dropped when the player enters a new column, and also when the radius gets smaller. A larger radius keeps loading. Once the square for the current radius is loaded, an update in that same column does nothing.
+`ChunkWorld.update` does one chunk of work and returns. The first call builds the surface layer of the player's column nearest the player's y. Later calls move outward one ring at a time. Chunks past the radius are dropped when the player enters a new column, and also when the radius gets smaller. A larger radius keeps loading. Once the square for the current radius is loaded and every chunk's detail matches its distance, an update in that same column does nothing.
+
+Detail follows distance. Within 2 chunks the cells are half a unit (32 cubes along the chunk). Through 6 chunks the cells are one unit. Farther than that the cells are two units. Walking closer rebuilds the chunk finer, one chunk on each update, nearest first. Walking away rebuilds it coarser. The feet still use `groundHeightAt`, so the coarser mesh does not move the ground under the player.
+
+Two chunks of the same detail still share the face sample for sample. Two chunks of different detail do not, so each of those shared sides grows a skirt `skirtDrop` (8) units down. The skirt faces away from the chunk. A side whose neighbor is outside the loaded square does not grow one.
 
 ## A chunk box is drawn only when it meets the view
 
@@ -84,11 +88,13 @@ The sample at local `x = 16` of one chunk is the sample at local `x = 0` of the 
 
 Each plane keeps the side where `x*nx + y*ny + z*nz + d` is at least 0. A chunk is the box from its origin to that origin plus `chunkSize` on each axis. The test looks at the corner farthest along the plane. If that corner is outside, the whole box is outside and the chunk is skipped. A box that only crosses the edge, and the box that contains the camera, stay. A chunk with no triangles is skipped before the test.
 
+A chunk that stays is still drawn one triangle at a time. `drawChunk` skips a triangle when all three corners are outside one plane, and when the camera is on the back side of `(b - a) × (c - a)`. A triangle that only crosses the edge is drawn. The ground faces a camera above it and does not face a camera under it.
+
 ## Look and move are not UpdateCamera
 
 `Player` and `FreeCamera` both call `stepLook`. The mouse changes yaw and pitch in `turnLook`. `aimLook` puts the target one unit along that look. Yaw 0, pitch 0 looks north: from `(0, 0, 4)` the target is `(0, 0, 3)`. W moves on `-Z`. D moves on `+X`. W and D together still travel at `moveSpeed` (4). Pitch stops at `pitchLimit`, just short of straight up or down.
 
-Normal movement is `moveWalk`. The camera is the eyes, `eyeHeight` (2) above the feet. Gravity accelerates `velocityY` downward. The feet stop on `surfaceAt`, the bilinear blend of the four integer ground samples. A rise taller than `stepHeight` (1) cancels the horizontal step. Space jumps only when the feet are on the ground. Debug movement is still `moveDebug`: Space climbs, Shift descends, and the body does not fall or collide.
+Normal movement is `moveWalk`. The camera is the eyes, `eyeHeight` (2) above the feet. Gravity accelerates `velocityY` downward. The feet stop on `surfaceAt`, which is `groundHeightAt`, the same height the marching cubes sample. A rise taller than `stepHeight` (1) cancels the horizontal step. Space jumps only when the feet are on the ground. Debug movement is still `moveDebug`: Space climbs, Shift descends, and the body does not fall or collide. Holding left ctrl multiplies that flight by `debugFast` (8). Walking ignores that key.
 
 The compass reads `target - position`. It does not call `GetCameraForward`. The strongest axis wins, and a tie keeps the earlier name.
 
@@ -99,6 +105,10 @@ The compass reads `target - position`. It does not call `GetCameraForward`. The 
 The menu calls `EnableCursor`. Closing it calls `DisableCursor` and sets `settle` back to 2. Those two look updates throw away the mouse delta from locking the cursor, so the view does not spin.
 
 Debug flight is `moveDebug`. Forward is `lookDirection`, so a positive pitch climbs. Strafe comes from `groundAxes`: at yaw 0, D is +X. The menu holds the flag, and `Player.setDebugMove` copies it before `update` and clears the fall speed. Normal movement does not use that flight.
+
+## A fine sample grid is too big for the stack
+
+A near chunk stores `33 * 33 * 33` material ids and the same number of densities. That is about 288KB before any triangles. Those arrays are sized to the chunk's detail and live on the heap. A far chunk stores `9 * 9 * 9` instead. The checks allocate each chunk with `ChunkSmooth.create`. The game does the same in `fillChunk`. Spawn height calls `groundHeight` and does not build a chunk just to read it.
 
 ## `debug` is a keyword
 

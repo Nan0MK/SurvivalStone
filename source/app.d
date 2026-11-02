@@ -23,10 +23,9 @@ void main() {
 
 	Player view = Player.create();
 	// Start above the ground. The old spawn height sits inside it.
-	ChunkSmooth ground;
 	int gx = floorInt(view.camera.position.x);
 	int gz = floorInt(view.camera.position.z);
-	view.camera.position.y = ground.terrainHeight(gx, gz) + 2.0f;
+	view.camera.position.y = groundHeight(gx, gz) + 2.0f;
 
 	ChunkWorld* world = new ChunkWorld();
 	PauseMenu menu;
@@ -58,7 +57,7 @@ void main() {
 		scope (exit)
 			EndDrawing();
 
-		ClearBackground(Colors.BLACK);
+		ClearBackground(Colors.SKYBLUE);
 
 		BeginMode3D(view.camera);
 

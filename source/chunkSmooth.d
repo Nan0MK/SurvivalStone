@@ -340,16 +340,53 @@ struct SmoothTriangle {
 /// Samples sit on a grid one step wider than the cubes. Marching cubes builds
 /// the surface where density crosses isolevel. A triangle takes its color from
 /// the solid material next to that surface.
+// Finest marching cubes, used next to the player. A chunk stays 16 units across.
+// The player is not scaled with this. Farther chunks use fewer cubes.
+enum int cubesPerUnit = 2;
+// A skirt this tall covers the gap where two resolutions meet.
+enum float skirtDrop = 8.0f;
+
 struct ChunkSmooth {
     const int chunkSize = 16;
-    const int sampleCount = chunkSize + 1;
-    const int sampleVolume = sampleCount * sampleCount * sampleCount;
+    int meshResolution = cubesPerUnit;
+    int cubeCount = chunkSize * cubesPerUnit;
+    int sampleCount = chunkSize * cubesPerUnit + 1;
+    float sampleStep = 1.0f / cubesPerUnit;
     enum float isolevel = 0.0f;
 
-    int[sampleVolume] materials;
-    float[sampleVolume] density;
+    // +X, -X, +Z, -Z. A side whose neighbor uses a different cube count gets a skirt.
+    int[4] neighborCells = [32, 32, 32, 32];
+
+    int[] materials;
+    float[] density;
     SmoothTriangle[] triangles;
     Vector3 origin;
+
+    static ChunkSmooth* create(int cells = 0) {
+        ChunkSmooth* chunk = new ChunkSmooth();
+        if(cells < 1)
+            cells = chunk.chunkSize * cubesPerUnit;
+        chunk.setCells(cells);
+        return chunk;
+    }
+
+    // cells is how many marching cubes run along one edge of this chunk.
+    void setCells(int cells) {
+        cubeCount = cells;
+        sampleCount = cells + 1;
+        sampleStep = cast(float)chunkSize / cast(float)cells;
+        meshResolution = 0;
+        if(cells >= chunkSize && cells % chunkSize == 0)
+            meshResolution = cells / chunkSize;
+        int volume = sampleCount * sampleCount * sampleCount;
+        materials.length = volume;
+        density.length = volume;
+        int n = 0;
+        while(n < 4) {
+            neighborCells[n] = cells;
+            n += 1;
+        }
+    }
 
     // X moves fastest, then Y, then Z. Same order as Chunk2.chunkIndex.
     int sampleIndex(int x, int y, int z) {
@@ -362,7 +399,7 @@ struct ChunkSmooth {
         density[i] = d;
     }
 
-    // Altitude plus detail plus ledges. The sum is the ground surface.
+    // Altitude, then ranges, then ledges, then detail. The sum is the ground surface.
     float terrainHeight(int x, int z) {
         return groundHeight(x, z);
     }
@@ -378,13 +415,13 @@ struct ChunkSmooth {
         while(z < sampleCount) {
             int x = 0;
             while(x < sampleCount) {
-                int wx = baseX + x;
-                int wz = baseZ + z;
-                float h = terrainHeight(wx, wz);
+                float wx = cast(float)baseX + cast(float)x * sampleStep;
+                float wz = cast(float)baseZ + cast(float)z * sampleStep;
+                float h = groundHeightAt(wx, wz);
                 int y = 0;
                 while(y < sampleCount) {
-                    int wy = baseY + y;
-                    float d = h - cast(float)wy;
+                    float wy = cast(float)baseY + cast(float)y * sampleStep;
+                    float d = h - wy;
                     int id = getMaterialID(MaterialType.AIR);
                     if(d > isolevel)
                         id = terrainMaterial(wx, wy, wz);
@@ -400,19 +437,21 @@ struct ChunkSmooth {
             z += 1;
         }
         // A chunk that is all ground or all air has no surface.
-        if(minD <= isolevel && maxD > isolevel)
+        if(minD <= isolevel && maxD > isolevel) {
             buildMesh();
+            addSkirts();
+        }
     }
 
     void buildMesh() {
         triangles.length = 0;
-        triangles.reserve(chunkSize * chunkSize * 8);
+        triangles.reserve(cubeCount * cubeCount * 8);
         int y = 0;
-        while(y < chunkSize) {
+        while(y < cubeCount) {
             int z = 0;
-            while(z < chunkSize) {
+            while(z < cubeCount) {
                 int x = 0;
-                while(x < chunkSize) {
+                while(x < cubeCount) {
                     marchCube(x, y, z);
                     x += 1;
                 }
@@ -422,13 +461,20 @@ struct ChunkSmooth {
         }
     }
 
-    void drawChunk() {
+    // A triangle outside the view, or facing away from the camera, is not drawn.
+    void drawChunk(Camera3D camera, Frustum view) {
         int i = 0;
         int count = cast(int)triangles.length;
         while(i < count) {
             SmoothTriangle tri = triangles[i];
-            Vector3 normal = faceNormal(tri.a, tri.b, tri.c);
-            DrawTriangle3D(tri.a + origin, tri.b + origin, tri.c + origin, shadeColor(tri.color, normal));
+            Vector3 a = tri.a + origin;
+            Vector3 b = tri.b + origin;
+            Vector3 c = tri.c + origin;
+            if(triangleInFrustum(view, a, b, c)) {
+                Vector3 normal = faceNormal(a, b, c);
+                if(facesCamera(normal, a, camera.position))
+                    DrawTriangle3D(a, b, c, shadeColor(tri.color, normal));
+            }
             i += 1;
         }
     }
@@ -447,7 +493,7 @@ struct ChunkSmooth {
             int i = sampleIndex(sx, sy, sz);
             val[n] = density[i];
             mat[n] = materials[i];
-            pos[n] = Vector3(cast(float)sx, cast(float)sy, cast(float)sz);
+            pos[n] = Vector3(cast(float)sx * sampleStep, cast(float)sy * sampleStep, cast(float)sz * sampleStep);
             n += 1;
         }
 
@@ -504,6 +550,121 @@ struct ChunkSmooth {
             n += 1;
         }
         return getMaterialColor(bestId);
+    }
+
+    // Drop a strip down a side that meets a different resolution, so the seam stays covered.
+    void addSkirts() {
+        int face = 0;
+        while(face < 4) {
+            if(neighborCells[face] != cubeCount)
+                skirtFace(face);
+            face += 1;
+        }
+    }
+
+    void skirtFace(int face) {
+        float plane = 0.0f;
+        int axis = 0;
+        Vector3 outward = Vector3(0, 0, 0);
+        if(face == 0) {
+            plane = cast(float)chunkSize;
+            axis = 0;
+            outward = Vector3(1, 0, 0);
+        } else if(face == 1) {
+            plane = 0.0f;
+            axis = 0;
+            outward = Vector3(-1, 0, 0);
+        } else if(face == 2) {
+            plane = cast(float)chunkSize;
+            axis = 1;
+            outward = Vector3(0, 0, 1);
+        } else {
+            plane = 0.0f;
+            axis = 1;
+            outward = Vector3(0, 0, -1);
+        }
+
+        int[6][] seen;
+        int count = cast(int)triangles.length;
+        int i = 0;
+        while(i < count) {
+            SmoothTriangle tri = triangles[i];
+            Vector3[3] p = [tri.a, tri.b, tri.c];
+            int e = 0;
+            while(e < 3) {
+                Vector3 a = p[e];
+                Vector3 b = p[(e + 1) % 3];
+                if(onPlane(a, axis, plane) && onPlane(b, axis, plane))
+                    addSkirtEdge(a, b, outward, tri.color, seen);
+                e += 1;
+            }
+            i += 1;
+        }
+    }
+
+    bool onPlane(Vector3 p, int axis, float plane) {
+        float v = p.x;
+        if(axis == 1)
+            v = p.z;
+        float d = v - plane;
+        return d < 0.001f && d > -0.001f;
+    }
+
+    void addSkirtEdge(Vector3 a, Vector3 b, Vector3 outward, Color color, ref int[6][] seen) {
+        int ax = quantSkirt(a.x);
+        int ay = quantSkirt(a.y);
+        int az = quantSkirt(a.z);
+        int bx = quantSkirt(b.x);
+        int by = quantSkirt(b.y);
+        int bz = quantSkirt(b.z);
+        if(ax == bx && ay == by && az == bz)
+            return;
+        if(bx < ax || (bx == ax && by < ay) || (bx == ax && by == ay && bz < az)) {
+            int tx = ax;
+            int ty = ay;
+            int tz = az;
+            ax = bx;
+            ay = by;
+            az = bz;
+            bx = tx;
+            by = ty;
+            bz = tz;
+        }
+        int n = 0;
+        while(n < cast(int)seen.length) {
+            int[6] key = seen[n];
+            if(key[0] == ax && key[1] == ay && key[2] == az && key[3] == bx && key[4] == by && key[5] == bz)
+                return;
+            n += 1;
+        }
+        int[6] key = [ax, ay, az, bx, by, bz];
+        seen ~= key;
+
+        Vector3 a2 = Vector3(a.x, a.y - skirtDrop, a.z);
+        Vector3 b2 = Vector3(b.x, b.y - skirtDrop, b.z);
+        Vector3 normal = faceNormal(a, b, b2);
+        float facing = normal.x * outward.x + normal.y * outward.y + normal.z * outward.z;
+        SmoothTriangle top;
+        SmoothTriangle bottom;
+        top.color = color;
+        bottom.color = color;
+        if(facing >= 0.0f) {
+            top.a = a;
+            top.b = b;
+            top.c = b2;
+            bottom.a = a;
+            bottom.b = b2;
+            bottom.c = a2;
+        } else {
+            top.a = b;
+            top.b = a;
+            top.c = a2;
+            bottom.a = b;
+            bottom.b = a2;
+            bottom.c = b2;
+        }
+        triangles ~= top;
+        triangles ~= bottom;
     }
 }
 
@@ -575,32 +736,56 @@ int chunkCoord(float p, int size) {
 // Render distance in chunks, on x and on z. A new world starts at this.
 enum int chunkRadius = 20;
 
-float groundHeight(int x, int z) {
-    float fx = cast(float)x;
-    float fz = cast(float)z;
-    // Ledges are added to the altitude. Detail comes after, so it sits on the steps.
-    float height = altitudeAt(fx, fz);
-    height += ledgesAt(fx, fz);
-    height += detailAt(fx, fz);
+// Cubes along one edge. Near the player the cells are half a unit.
+// A few chunks out they are one unit, and past that they are two units.
+int lodCells(int dist) {
+    int size = ChunkSmooth.init.chunkSize;
+    if(dist < 0)
+        dist = -dist;
+    if(dist <= 2)
+        return size * 2;
+    if(dist <= 6)
+        return size;
+    return size / 2;
+}
+
+int quantSkirt(float v) {
+    if(v >= 0.0f)
+        return cast(int)(v * 64.0f + 0.5f);
+    return cast(int)(v * 64.0f - 0.5f);
+}
+
+// The layers in the terrain illustration, from the bottom up.
+// Detail is last, so the bumps sit on the ledges.
+float groundHeightAt(float x, float z) {
+    float height = altitudeAt(x, z);
+    height += rangesAt(x, z);
+    height += ledgesAt(x, z);
+    height += detailAt(x, z);
     return height;
+}
+
+float groundHeight(int x, int z) {
+    return groundHeightAt(cast(float)x, cast(float)z);
 }
 
 // Chunk layers the ground passes through in one column. y1 is the top layer that has solid samples.
 void surfaceLayers(int cx, int cz, int size, out int y0, out int y1) {
     float minH = float.max;
     float maxH = -float.max;
-    int lz = 0;
-    while(lz <= size) {
-        int lx = 0;
-        while(lx <= size) {
-            float h = groundHeight(cx * size + lx, cz * size + lz);
+    float step = 1.0f / cubesPerUnit;
+    float lz = 0.0f;
+    while(lz <= cast(float)size) {
+        float lx = 0.0f;
+        while(lx <= cast(float)size) {
+            float h = groundHeightAt(cast(float)(cx * size) + lx, cast(float)(cz * size) + lz);
             if(h < minH)
                 minH = h;
             if(h > maxH)
                 maxH = h;
-            lx += 1;
+            lx += step;
         }
-        lz += 1;
+        lz += step;
     }
     y0 = chunkCoord(minH, size);
     y1 = chunkCoord(maxH, size);
@@ -671,6 +856,30 @@ bool boxInFrustum(Frustum frustum, Vector3 bmin, Vector3 bmax) {
     return true;
 }
 
+// True when the triangle is not completely outside any side of the view.
+// A triangle that only crosses an edge still counts.
+bool triangleInFrustum(Frustum frustum, Vector3 a, Vector3 b, Vector3 c) {
+    int i = 0;
+    while(i < 6) {
+        FrustumPlane plane = frustum.planes[i];
+        float sa = plane.x * a.x + plane.y * a.y + plane.z * a.z + plane.d;
+        float sb = plane.x * b.x + plane.y * b.y + plane.z * b.z + plane.d;
+        float sc = plane.x * c.x + plane.y * c.y + plane.z * c.z + plane.d;
+        if(sa < 0.0f && sb < 0.0f && sc < 0.0f)
+            return false;
+        i += 1;
+    }
+    return true;
+}
+
+// True when the camera sits on the front side of the triangle. The normal is (b - a) × (c - a).
+bool facesCamera(Vector3 normal, Vector3 point, Vector3 cameraPos) {
+    float dx = cameraPos.x - point.x;
+    float dy = cameraPos.y - point.y;
+    float dz = cameraPos.z - point.z;
+    return normal.x * dx + normal.y * dy + normal.z * dz > 0.0f;
+}
+
 struct ChunkWorld {
     int radius = chunkRadius;
     private ChunkSmooth*[ulong] loaded;
@@ -700,6 +909,9 @@ struct ChunkWorld {
         }
         if(caughtUp)
             return;
+        // Raise or lower one chunk's detail before filling the horizon.
+        if(refreshNearest())
+            return;
         if(!fillNearest(size))
             caughtUp = true;
     }
@@ -721,7 +933,7 @@ struct ChunkWorld {
             Vector3 bmin = chunk.origin;
             Vector3 bmax = Vector3(bmin.x + size, bmin.y + size, bmin.z + size);
             if(boxInFrustum(view, bmin, bmax))
-                chunk.drawChunk();
+                chunk.drawChunk(camera, view);
         }
     }
 
@@ -827,13 +1039,90 @@ struct ChunkWorld {
         return false;
     }
 
+    private int columnDist(int cx, int cz) {
+        int dx = cx - playerCx;
+        if(dx < 0)
+            dx = -dx;
+        int dz = cz - playerCz;
+        if(dz < 0)
+            dz = -dz;
+        return dx > dz ? dx : dz;
+    }
+
+    // Outside the loaded square there is no neighbor, so that side matches this chunk.
+    private int cellsBeside(int cx, int cz, int own) {
+        if(columnDist(cx, cz) > radius)
+            return own;
+        return lodCells(columnDist(cx, cz));
+    }
+
+    private void applyNeighbors(ChunkSmooth* chunk, int cx, int cz) {
+        int own = chunk.cubeCount;
+        chunk.neighborCells[0] = cellsBeside(cx + 1, cz, own);
+        chunk.neighborCells[1] = cellsBeside(cx - 1, cz, own);
+        chunk.neighborCells[2] = cellsBeside(cx, cz + 1, own);
+        chunk.neighborCells[3] = cellsBeside(cx, cz - 1, own);
+    }
+
+    private bool chunkStale(ChunkSmooth* chunk, int cx, int cz) {
+        int want = lodCells(columnDist(cx, cz));
+        if(chunk.cubeCount != want)
+            return true;
+        if(chunk.neighborCells[0] != cellsBeside(cx + 1, cz, want))
+            return true;
+        if(chunk.neighborCells[1] != cellsBeside(cx - 1, cz, want))
+            return true;
+        if(chunk.neighborCells[2] != cellsBeside(cx, cz + 1, want))
+            return true;
+        if(chunk.neighborCells[3] != cellsBeside(cx, cz - 1, want))
+            return true;
+        return false;
+    }
+
+    // The closest chunk whose detail does not match its distance.
+    private bool refreshNearest() {
+        int bestDist = int.max;
+        int bestYd = int.max;
+        int bestCy = 0;
+        int bestCx = 0;
+        int bestCz = 0;
+        ChunkSmooth* best = null;
+        foreach(key, chunk; loaded) {
+            int cx;
+            int cy;
+            int cz;
+            unpackKey(key, cx, cy, cz);
+            if(!chunkStale(chunk, cx, cz))
+                continue;
+            int dist = columnDist(cx, cz);
+            int yd = cy - playerCy;
+            if(yd < 0)
+                yd = -yd;
+            if(best is null || dist < bestDist || (dist == bestDist && (yd < bestYd || (yd == bestYd && cy < bestCy)))) {
+                best = chunk;
+                bestDist = dist;
+                bestYd = yd;
+                bestCy = cy;
+                bestCx = cx;
+                bestCz = cz;
+            }
+        }
+        if(best is null)
+            return false;
+        best.setCells(lodCells(bestDist));
+        applyNeighbors(best, bestCx, bestCz);
+        best.populateTerrain();
+        return true;
+    }
+
     private void fillChunk(ulong key, int size) {
         int cx;
         int cy;
         int cz;
         unpackKey(key, cx, cy, cz);
-        ChunkSmooth* chunk = new ChunkSmooth();
+        ChunkSmooth* chunk = ChunkSmooth.create(lodCells(columnDist(cx, cz)));
         chunk.origin = Vector3(cast(float)(cx * size), cast(float)(cy * size), cast(float)(cz * size));
+        applyNeighbors(chunk, cx, cz);
         chunk.populateTerrain();
         loaded[key] = chunk;
     }
@@ -931,41 +1220,126 @@ float altitudeAt(float x, float z) {
     return 28.0f + n * 160.0f;
 }
 
-// Jagged bumps. A low mask holds this layer at 0, which is the flat stretch.
-float detailAt(float x, float z) {
-    float mask = perlin2(x * 0.04f + 1.7f, z * 0.04f + 4.2f);
-    if(mask <= 0.0f)
-        return 0.0f;
-    float n = perlin2(x * 0.22f + 9.3f, z * 0.22f + 2.6f);
-    n += 0.5f * perlin2(x * 0.44f + 9.3f, z * 0.44f + 2.6f);
-    return n * 3.5f;
+// Smooth 0..1 wave from the illustration. It scales the bumps. Lows stay quiet.
+float detailIntensityAt(float x, float z) {
+    float scale = 1.0f / (24.0f * 16.0f);
+    float n = perlin2(x * scale + 1.7f, z * scale + 4.2f);
+    float t = n * 0.5f + 0.5f;
+    if(t < 0.0f)
+        t = 0.0f;
+    if(t > 1.0f)
+        t = 1.0f;
+    return t * t;
 }
 
-// u is 0 at the bottom of the ledge wave and 1 at the top. Three steps of 8.
-// Most of a step stays near its floor. The rise is packed into the end of the step.
+// Bumps on the steps. Their height follows detail intensity, and full strength is 1.5.
+float detailAt(float x, float z) {
+    float intensity = detailIntensityAt(x, z);
+    float n = perlin2(x * 0.22f + 9.3f, z * 0.22f + 2.6f);
+    n += 0.5f * perlin2(x * 0.44f + 9.3f, z * 0.44f + 2.6f);
+    return n * 1.5f * intensity;
+}
+
+// One cycle is a steep rise and then a long slope down. Three cycles fit in 0..1.
+// The peak of a cycle is 8. The bottom is 0.
 float ledgeWave(float u) {
     if(u < 0.0f)
         u = 0.0f;
     if(u > 1.0f)
         u = 1.0f;
-    float steps = 3.0f;
-    float s = u * steps;
-    float base = cast(float)floorInt(s);
-    float frac = s - base;
-    float shaped = frac * frac * frac * frac;
-    return (base + shaped) / steps * 24.0f;
+    float cycles = 3.0f;
+    float rise = 0.18f;
+    float s = u * cycles;
+    float frac = s - cast(float)floorInt(s);
+    float shaped;
+    if(frac < rise)
+        shaped = frac / rise;
+    else
+        shaped = (1.0f - frac) / (1.0f - rise);
+    return shaped * 8.0f;
 }
 
-// Added onto the altitude, before detail. Not a reshape of the finished height.
-float ledgesAt(float x, float z) {
-    float n = perlin2(x * 0.03f + 6.5f, z * 0.03f + 11.2f) * 1.8f;
+// The scarp itself, before intensity and chance scale it. The noise is wide.
+float ledgeShapeAt(float x, float z) {
+    float n = perlin2(x * 0.01f + 6.5f, z * 0.01f + 11.2f) * 1.8f;
     return ledgeWave(n * 0.5f + 0.5f);
 }
 
+// Smooth 0..1 wave, like detail intensity. The noise is mapped one-to-one, so a
+// high stretch reaches a full ledge and a low stretch stays quiet. It scales height.
+float ledgeIntensityAt(float x, float z) {
+    float scale = 1.0f / (32.0f * 16.0f);
+    float n = perlin2(x * scale + 8.6f, z * scale + 2.9f);
+    float t = n + 0.5f;
+    if(t < 0.0f)
+        t = 0.0f;
+    if(t > 1.0f)
+        t = 1.0f;
+    return t * t;
+}
+
+// Smooth 0..1 wave, like detail intensity, across a wider area. Where it is low,
+// the ledges fade out. Where it is high, they are present.
+float ledgeChanceAt(float x, float z) {
+    float scale = 1.0f / (48.0f * 16.0f);
+    float n = perlin2(x * scale + 12.4f, z * scale + 6.1f);
+    float t = n + 0.5f;
+    if(t < 0.0f)
+        t = 0.0f;
+    if(t > 1.0f)
+        t = 1.0f;
+    return t * t;
+}
+
+// Sits on the ranges, before detail. Height is the scarp times intensity times chance.
+float ledgesAt(float x, float z) {
+    return ledgeShapeAt(x, z) * ledgeIntensityAt(x, z) * ledgeChanceAt(x, z);
+}
+
+// One giant ledge. u moves from 0 to 1 across the whole shape.
+// First a steep climb of 300. Then a drop of 75, only a little less steep.
+// Then a long slope back down to the plain.
+float rangeWave(float u) {
+    if(u < 0.0f)
+        u = 0.0f;
+    if(u > 1.0f)
+        u = 1.0f;
+    float peak = 300.0f;
+    float drop = 75.0f;
+    float riseEnd = 0.02f;
+    float dropRun = riseEnd * (drop / peak) * 1.25f;
+    float dropEnd = riseEnd + dropRun;
+    if(u < riseEnd)
+        return peak * (u / riseEnd);
+    if(u < dropEnd) {
+        float t = (u - riseEnd) / dropRun;
+        return peak - drop * t;
+    }
+    float t = (u - dropEnd) / (1.0f - dropEnd);
+    return (peak - drop) * (1.0f - t);
+}
+
+// The noise slides along that shape. One cycle is a few hundred units, so the
+// climb stays a wall and the last slope stays long.
+float rangesAt(float x, float z) {
+    float scale = 1.0f / 480.0f;
+    float n = perlin2(x * scale + 8.3833f, z * scale - 0.4667f);
+    float u = n * 0.5f + 0.5f;
+    if(u < 0.0f)
+        u = 0.0f;
+    if(u > 1.0f)
+        u = 1.0f;
+    return rangeWave(u);
+}
+
 // Solid cells only. Another Perlin sample picks dirt or rock, and it changes with depth.
-int terrainMaterial(int x, int y, int z) {
-    float n = perlin2(cast(float)x * 0.13f + 2.2f, cast(float)z * 0.13f + cast(float)y * 0.13f + 7.5f);
+int terrainMaterial(float x, float y, float z) {
+    float n = perlin2(x * 0.13f + 2.2f, z * 0.13f + y * 0.13f + 7.5f);
     if(n >= 0.0f)
         return getMaterialID(MaterialType.ROCK);
     return getMaterialID(MaterialType.DIRT);
+}
+
+int terrainMaterial(int x, int y, int z) {
+    return terrainMaterial(cast(float)x, cast(float)y, cast(float)z);
 }
