@@ -4,6 +4,7 @@ import raylib;
 
 import block;
 import chunk;
+import chunkQuads;
 import gameDebug.camera;
 import gameDebug.hud;
 import player;
@@ -15,8 +16,10 @@ int checkFrame() {
 	Report report;
 	SetConfigFlags(ConfigFlags.FLAG_WINDOW_HIDDEN);
 	InitWindow(1280, 720, "aiTest");
-	scope (exit)
+	scope (exit) {
+		unloadNodeSprite();
 		CloseWindow();
+	}
 	report.expect(IsWindowReady(), "window opened");
 	if (!IsWindowReady())
 		return report.failed;
@@ -50,6 +53,7 @@ int checkFrame() {
 	ClearBackground(Colors.BLACK);
 	BeginMode3D(camera);
 	chunk.drawChunk();
+	drawChunkNodes(camera, camera.position);
 	DrawGrid(10, 1);
 	EndMode3D();
 	hud.draw(view);

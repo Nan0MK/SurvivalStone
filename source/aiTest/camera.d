@@ -5,10 +5,12 @@ import std.math : sin, cos, sqrt;
 
 import raylib;
 
+import chunkQuads;
 import chunkSmooth;
 import gameDebug.camera;
 import gameDebug.hud;
 import player;
+import terrainQuads;
 
 import aiTest.check;
 
@@ -68,7 +70,10 @@ int checkCamera() {
 	report.expect(closeTo(diagonal, moveSpeed), "W and D together stay at move speed");
 
 	report.expect(eyeHeight == 2.0f && stepHeight == 1.0f && moveSpeed == 4.0f, "the player keeps its size");
-	report.expect(closeTo(surfaceAt(3.5f, 5.25f), groundHeightAt(3.5f, 5.25f)), "the feet use the same height as the mesh");
+	report.expect(closeTo(surfaceAt(3.5f, 5.25f), quadHeightAt(3.5f, 5.25f)), "the feet use the visible quad ground");
+	float jumpReach = jumpSpeed * jumpSpeed / (2.0f * gravity);
+	report.expect(gravity >= 64.0f, "gravity pulls the player down hard");
+	report.expect(jumpReach > wallSide * 2.0f, "a jump rises past a two-square cliff");
 
 	float fallFrom = surfaceAt(2, 2) + eyeHeight + 30;
 	Vector3 falling = Vector3(2, fallFrom, 2);
@@ -91,33 +96,28 @@ int checkCamera() {
 	moveWalk(jumper, jumpSpeedY, 0, 0, 0, true, 0.05f);
 	report.expect(jumpSpeedY < rising, "gravity slows a jump in the air");
 
-	int cliff = 0;
-	int cliffZ = 0;
 	bool haveCliff = false;
-	int scanZ = -2048;
-	while (scanZ <= 2048 && !haveCliff) {
-		int scanX = -4096;
-		while (scanX < 4096 && !haveCliff) {
-			if (groundHeight(scanX + 8, scanZ) > groundHeight(scanX, scanZ) + stepHeight + 0.5f) {
-				int fine = scanX;
-				while (fine < scanX + 8) {
-					if (groundHeight(fine + 1, scanZ) > groundHeight(fine, scanZ) + stepHeight + 0.5f) {
-						cliff = fine;
-						cliffZ = scanZ;
-						haveCliff = true;
-						break;
-					}
-					fine += 1;
-				}
+	float standX = 0;
+	float standZ = 0;
+	int scanZ = -128;
+	while (scanZ <= 128 && !haveCliff) {
+		int scanX = -64;
+		while (scanX < 320 && !haveCliff) {
+			float edge = cast(float) scanX + wallSide;
+			float z = cast(float) scanZ + 0.5f;
+			float low = quadHeightAt(edge - 0.3f, z);
+			float high = quadHeightAt(edge + 0.5f, z);
+			if (high > low + stepHeight) {
+				standX = edge - 0.3f;
+				standZ = z;
+				haveCliff = true;
 			}
-			scanX += 8;
+			scanX += cast(int) wallSide;
 		}
-		scanZ += 8;
+		scanZ += cast(int) wallSide;
 	}
-	report.expect(haveCliff, "the ground has a step taller than a stride");
+	report.expect(haveCliff, "the visible ground has a step taller than a stride");
 	if (haveCliff) {
-		float standX = cast(float) cliff + 0.1f;
-		float standZ = cast(float) cliffZ + 0.05f;
 		float standY = surfaceAt(standX, standZ) + eyeHeight;
 		Vector3 blocked = Vector3(standX, standY, standZ);
 		float blockedSpeed = 0;
@@ -169,6 +169,7 @@ int checkCamera() {
 	report.expect(bodyFlags.debugMovement(), "debug movement turns on");
 
 	PauseMenu menu;
+	report.expect(!menu.showNodes, "nodes start off");
 	report.expect(menu.renderDistance == chunkRadius && chunkRadius == 20, "render distance starts at 20");
 	menu.open = true;
 	Rectangle debugRow = menu.debugRowAt(1280, 720);
@@ -178,6 +179,16 @@ int checkCamera() {
 	report.expect(!closed && menu.open && menu.debugMove, "debug row turns movement on");
 	closed = menu.press(onDebug, 1280, 720);
 	report.expect(!closed && menu.open && !menu.debugMove, "debug row turns movement off");
+
+	Rectangle nodesRow = menu.nodesRowAt(1280, 720);
+	Vector2 onNodes = Vector2(nodesRow.x + nodesRow.width / 2, nodesRow.y + nodesRow.height / 2);
+	report.expect(!CheckCollisionPointRec(onNodes, debugRow), "nodes row is not the debug row");
+	closed = menu.press(onNodes, 1280, 720);
+	report.expect(!closed && menu.open && menu.showNodes && !menu.debugMove, "nodes row turns nodes on");
+	closed = menu.press(onNodes, 1280, 720);
+	report.expect(!closed && menu.open && !menu.showNodes && !menu.debugMove, "nodes row turns nodes off");
+	closed = menu.press(onNodes, 1280, 720);
+	report.expect(menu.showNodes, "nodes stay on for the distance rows");
 
 	int choice = 0;
 	int[6] want = [10, 20, 40, 100, 200, 500];
@@ -190,12 +201,14 @@ int checkCamera() {
 		choice += 1;
 	}
 	report.expect(!menu.debugMove, "a distance choice leaves debug movement off");
+	report.expect(menu.showNodes, "a distance choice leaves nodes on");
 
 	Rectangle resumeRow = menu.resumeRowAt(1280, 720);
 	Vector2 onResume = Vector2(resumeRow.x + 2, resumeRow.y + 2);
 	report.expect(!CheckCollisionPointRec(onResume, debugRow), "resume is not the debug row");
+	report.expect(!CheckCollisionPointRec(onResume, nodesRow), "resume is not the nodes row");
 	closed = menu.press(onResume, 1280, 720);
-	report.expect(closed && !menu.open && !menu.debugMove, "resume closes the menu");
+	report.expect(closed && !menu.open && !menu.debugMove && menu.showNodes, "resume closes the menu");
 
 	menu.open = true;
 	closed = menu.press(Vector2(0, 0), 1280, 720);

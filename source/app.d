@@ -1,15 +1,21 @@
+import std.random : unpredictableSeed;
 import std.stdio;
 
 import raylib;
 
 import block;
 import chunk;
+import chunkQuads;
 import chunkSmooth;
+import terrainQuads;
 import gameDebug.hud;
 import player;
 
 void main() {
+	uint seed = unpredictableSeed();
+	setTerrainSeed(seed);
 	writeln("SurvivalStone");
+	writeln("seed ", seed);
 	// BlockMesh myBlock;
 	// Chunk2 myChunk;
 	// myChunk.populateChunk();
@@ -20,17 +26,27 @@ void main() {
 	SetExitKey(KeyboardKey.KEY_NULL);
 	scope (exit)
 		CloseWindow();
+	loadNodeSprite();
+	scope (exit)
+		unloadNodeSprite();
 
 	Player view = Player.create();
-	// Start above the ground. The old spawn height sits inside it.
-	int gx = floorInt(view.camera.position.x);
-	int gz = floorInt(view.camera.position.z);
-	view.camera.position.y = groundHeight(gx, gz) + 2.0f;
+	// A fixed window on this seed's hills. Debug flight stays off the smooth height.
+	float originX = 64;
+	float originZ = -32;
+	int cells = 32;
+	float lookX = originX + cells * wallSide * 0.5f;
+	float lookZ = originZ + cells * wallSide * 0.5f;
+	float camZ = lookZ + 20;
+	view.camera.position = Vector3(lookX, groundHeightAt(lookX, camZ) + 18, camZ);
 
-	ChunkWorld* world = new ChunkWorld();
+	// ChunkWorld* world = new ChunkWorld();
 	PauseMenu menu;
-	world.radius = menu.renderDistance;
-	world.update(view.camera.position);
+	menu.debugMove = true;
+	view.setDebugMove(true);
+	// world.radius = menu.renderDistance;
+	// world.update(view.camera.position);
+	GridQuad[] quads = buildTerrain(originX, originZ, cells, cells);
 	// Hud hud;
 
 	while (!WindowShouldClose()) {
@@ -48,10 +64,10 @@ void main() {
 		}
 
 		view.setDebugMove(menu.debugMove);
-		world.radius = menu.renderDistance;
+		// world.radius = menu.renderDistance;
 		if (!menu.open)
 			view.update();
-		world.update(view.camera.position);
+		// world.update(view.camera.position);
 
 		BeginDrawing();
 		scope (exit)
@@ -63,7 +79,10 @@ void main() {
 
 		// myBlock.drawMesh();
 		// myChunk.drawChunk();
-		world.draw(view.camera);
+		// world.draw(view.camera);
+		drawQuads(quads);
+		if (menu.showNodes)
+			drawChunkNodes(view.camera, view.camera.position);
 
 		// DrawGrid(10, 1);
 		EndMode3D();

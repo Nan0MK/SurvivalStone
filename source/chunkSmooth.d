@@ -687,15 +687,15 @@ Vector3 vertexInterp(float iso, Vector3 p1, Vector3 p2, float v1, float v2) {
 }
 
 // Ken Perlin's improved noise, in 2D. perm holds the shuffle twice so a lookup
-// of perm[i] + 1 never walks off the end.
-int[512] buildPerm() {
+// of perm[i] + 1 never walks off the end. The same seed rebuilds the same hills.
+int[512] buildPerm(uint seed) {
     int[256] values;
     int i = 0;
     while(i < 256) {
         values[i] = i;
         i += 1;
     }
-    uint state = 127;
+    uint state = seed;
     i = 255;
     while(i > 0) {
         state = state * 1664525u + 1013904223u;
@@ -715,7 +715,14 @@ int[512] buildPerm() {
     return doubled;
 }
 
-immutable int[512] perm = buildPerm();
+// The checks use this seed. The game replaces it before it reads the ground.
+enum uint defaultTerrainSeed = 127;
+
+int[512] perm = buildPerm(defaultTerrainSeed);
+
+void setTerrainSeed(uint seed) {
+    perm = buildPerm(seed);
+}
 
 int floorInt(float v) {
     int i = cast(int)v;

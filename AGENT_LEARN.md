@@ -78,7 +78,7 @@ The sample at local position 16 of one chunk is index `sampleCount - 1`. It is t
 
 `ChunkWorld.update` does one chunk of work and returns. The first call builds the surface layer of the player's column nearest the player's y. Later calls move outward one ring at a time. Chunks past the radius are dropped when the player enters a new column, and also when the radius gets smaller. A larger radius keeps loading. Once the square for the current radius is loaded and every chunk's detail matches its distance, an update in that same column does nothing.
 
-Detail follows distance. Within 2 chunks the cells are half a unit (32 cubes along the chunk). Through 6 chunks the cells are one unit. Farther than that the cells are two units. Walking closer rebuilds the chunk finer, one chunk on each update, nearest first. Walking away rebuilds it coarser. The feet still use `groundHeightAt`, so the coarser mesh does not move the ground under the player.
+Detail follows distance. Within 2 chunks the cells are half a unit (32 cubes along the chunk). Through 6 chunks the cells are one unit. Farther than that the cells are two units. Walking closer rebuilds the chunk finer, one chunk on each update, nearest first. Walking away rebuilds it coarser. The feet use `quadHeightAt`, so a coarser marching-cubes mesh would not move the ground under the player. The visible quad ground does.
 
 Two chunks of the same detail still share the face sample for sample. Two chunks of different detail do not, so each of those shared sides grows a skirt `skirtDrop` (8) units down. The skirt faces away from the chunk. A side whose neighbor is outside the loaded square does not grow one.
 
@@ -94,7 +94,7 @@ A chunk that stays is still drawn one triangle at a time. `drawChunk` skips a tr
 
 `Player` and `FreeCamera` both call `stepLook`. The mouse changes yaw and pitch in `turnLook`. `aimLook` puts the target one unit along that look. Yaw 0, pitch 0 looks north: from `(0, 0, 4)` the target is `(0, 0, 3)`. W moves on `-Z`. D moves on `+X`. W and D together still travel at `moveSpeed` (4). Pitch stops at `pitchLimit`, just short of straight up or down.
 
-Normal movement is `moveWalk`. The camera is the eyes, `eyeHeight` (2) above the feet. Gravity accelerates `velocityY` downward. The feet stop on `surfaceAt`, which is `groundHeightAt`, the same height the marching cubes sample. A rise taller than `stepHeight` (1) cancels the horizontal step. Space jumps only when the feet are on the ground. Debug movement is still `moveDebug`: Space climbs, Shift descends, and the body does not fall or collide. Holding left ctrl multiplies that flight by `debugFast` (8). Walking ignores that key.
+Normal movement is `moveWalk`. The camera is the eyes, `eyeHeight` (2) above the feet. Gravity is 96 and `jumpSpeed` is 32, so a jump rises about 5.3, past a two-square cliff of 4. The feet stop on `surfaceAt`, which is `quadHeightAt`: the same flats, ramps, cliff floors, and bent triangles the window draws. A rise taller than `stepHeight` (1) cancels the horizontal step. Space jumps only when the feet are on the ground. Debug movement is still `moveDebug`: Space climbs, Shift descends, and the body does not fall or collide. Holding left ctrl multiplies that flight by `debugFast` (8). Walking ignores that key.
 
 The compass reads `target - position`. It does not call `GetCameraForward`. The strongest axis wins, and a tie keeps the earlier name.
 
@@ -109,6 +109,32 @@ Debug flight is `moveDebug`. Forward is `lookDirection`, so a positive pitch cli
 ## A fine sample grid is too big for the stack
 
 A near chunk stores `33 * 33 * 33` material ids and the same number of densities. That is about 288KB before any triangles. Those arrays are sized to the chunk's detail and live on the heap. A far chunk stores `9 * 9 * 9` instead. The checks allocate each chunk with `ChunkSmooth.create`. The game does the same in `fillChunk`. Spawn height calls `groundHeight` and does not build a chunk just to read it.
+
+## A diagonal grid step is longer than a straight one
+
+Nodes are integer x, y, z. A straight step (1, 0) has length 1, so a rise of 1 is 45°. A diagonal step (1, 1) has length √2, so a rise of 1 is about 35°, and the corners still sit on the dots. A 45° slope along that diagonal would end between the dots.
+
+The demo slopes are not that integer step. Each one is a square of `wallSide`, same as the walls, and the rise equals the run, so both are 45°. That rise is `wallSide / sqrt(2)`. The green ramp shares the whole south edge. The yellow ramp shares the whole northeast edge. A rise of 1 on those edges was a shorter rectangle, and the old yellow ramp met the wall at one corner only.
+
+## A terrain cell shares posts with its neighbors
+
+Hill posts sit `wallSide` apart. `heightLevel` rounds `groundHeightAt` to that step. A negative height rounds away from zero on the halfway case: `-1.5` steps becomes `-2`.
+
+Four equal posts are one flat square at that height. Opposite edges that differ by one step are one ramp across the cell. Its rise and its run are both `wallSide`, so it is 45° and the face is a rectangle. A larger difference keeps a flat at the lower height and stacks that many vertical squares on the high edge. Those squares face the low side: a north-high stack stands on the north edge and its normal points south.
+
+If the four posts are not two level edges, the cell is one bent quad through those four heights. Neighboring cells share the posts, so a ramp, a cliff, and a bent quad meet on the same edge. A ramp that used its own center, next to a flat of the same height, would leave a triangular hole.
+
+A regular octagon does not keep every corner on an integer dot. Equal sides of length `wallSide` make each wall a square that tall. The 45° side then moves `wallSide / sqrt(2)` on x and on z. Those corners are floats. Snapping both ends to integer dots forces the orange side to √2 while the blue side stays an integer, which is the shorter corner the demo used first.
+
+## A chunk node is a wallSide dot
+
+`chunkNodes` uses the chunk that contains the camera. A chunk is 16 units. Nodes sit every `wallSide` (2) on x, y, and z, from the chunk origin through the far face, so 16 is included and the next step (18) is not. The chunk just west of the origin starts at -16 and includes the shared face at 0.
+
+`DrawBillboard` turns a texture toward the camera. The node texture is a white circle. The draw pulls each dot toward the camera by half the sprite size, so a node sitting on a quad is not buried in that quad.
+
+## The noise seed is the shuffle
+
+`buildPerm` starts its shuffle from the seed. `defaultTerrainSeed` is 127, and that is the world the checks measure. `setTerrainSeed` replaces `perm`. The game does that with `unpredictableSeed` before `groundHeightAt` or `buildTerrain`. A height read before that call is still the 127 world. A check that calls `setTerrainSeed` has to put 127 back before it returns, or the later height checks measure a different world.
 
 ## `debug` is a keyword
 

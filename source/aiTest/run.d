@@ -17,7 +17,7 @@ int main(string[] args) {
 		writeView(args[2], position, target);
 		return 0;
 	}
-	immutable fails = checkChunk() + checkCamera() + checkFrame() + checkSmooth() + checkFrustum();
+	immutable fails = checkChunk() + checkCamera() + checkFrame() + checkSmooth() + checkFrustum() + checkQuads() + checkTerrain();
 	if (fails == 0) {
 		writeln("aiTest ok");
 		return 0;

@@ -84,8 +84,20 @@ void fillOutside(ref ChunkSmooth chunk) {
 	}
 }
 
+void checkSeed(Report report) {
+	float before = groundHeightAt(10.0f, 20.0f);
+	scope (exit)
+		setTerrainSeed(defaultTerrainSeed);
+	setTerrainSeed(1);
+	report.expect(!near(before, groundHeightAt(10.0f, 20.0f)), "a new seed moves the hills");
+	setTerrainSeed(defaultTerrainSeed);
+	report.expect(near(before, groundHeightAt(10.0f, 20.0f)), "the check seed brings the hills back");
+	report.expect(buildPerm(1) != buildPerm(defaultTerrainSeed), "two seeds build different shuffles");
+}
+
 int checkSmooth() {
 	Report report;
+	checkSeed(report);
 
 	int air = getMaterialID(MaterialType.AIR);
 	int dirt = getMaterialID(MaterialType.DIRT);

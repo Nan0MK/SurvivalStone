@@ -53,7 +53,8 @@ private enum int pauseInset = 28;
 private enum int pauseDebugTop = 72;
 private enum int pauseLabelH = 28;
 private enum int pauseChoiceGap = 8;
-private enum int pauseLabelTop = pauseDebugTop + pauseRowH + pauseRowGap;
+private enum int pauseNodesTop = pauseDebugTop + pauseRowH + pauseRowGap;
+private enum int pauseLabelTop = pauseNodesTop + pauseRowH + pauseRowGap;
 private enum int pauseChoicesTop = pauseLabelTop + pauseLabelH;
 private enum int pauseResumeTop = pauseChoicesTop + pauseRowH + pauseRowGap;
 private enum int pausePanelH = pauseResumeTop + pauseRowH + pauseInset;
@@ -68,11 +69,17 @@ private Rectangle pausePanelAt(int screenW, int screenH) {
 struct PauseMenu {
 	bool open;
 	bool debugMove;
+	bool showNodes;
 	int renderDistance = chunkRadius;
 
 	Rectangle debugRowAt(int screenW, int screenH) {
 		Rectangle panel = pausePanelAt(screenW, screenH);
 		return Rectangle(panel.x + pauseInset, panel.y + pauseDebugTop, panel.width - pauseInset * 2, pauseRowH);
+	}
+
+	Rectangle nodesRowAt(int screenW, int screenH) {
+		Rectangle panel = pausePanelAt(screenW, screenH);
+		return Rectangle(panel.x + pauseInset, panel.y + pauseNodesTop, panel.width - pauseInset * 2, pauseRowH);
 	}
 
 	Rectangle renderChoiceAt(int index, int screenW, int screenH) {
@@ -98,6 +105,10 @@ struct PauseMenu {
 			return false;
 		if (CheckCollisionPointRec(mouse, debugRowAt(screenW, screenH))) {
 			debugMove = !debugMove;
+			return false;
+		}
+		if (CheckCollisionPointRec(mouse, nodesRowAt(screenW, screenH))) {
+			showNodes = !showNodes;
 			return false;
 		}
 		int choice = 0;
@@ -137,6 +148,15 @@ struct PauseMenu {
 		string state = debugMove ? "On" : "Off";
 		int stateWidth = MeasureText(state.ptr, rowSize);
 		DrawText(state.ptr, cast(int) (debugRow.x + debugRow.width - stateWidth - 16), rowTextY, rowSize, Colors.RAYWHITE);
+
+		Rectangle nodesRow = nodesRowAt(screenW, screenH);
+		DrawRectangleRec(nodesRow, Color(48, 48, 56, 255));
+		int nodesTextY = cast(int) (nodesRow.y + (nodesRow.height - rowSize) / 2);
+		string nodesLabel = "Nodes";
+		DrawText(nodesLabel.ptr, cast(int) nodesRow.x + 16, nodesTextY, rowSize, Colors.RAYWHITE);
+		string nodesState = showNodes ? "On" : "Off";
+		int nodesStateWidth = MeasureText(nodesState.ptr, rowSize);
+		DrawText(nodesState.ptr, cast(int) (nodesRow.x + nodesRow.width - nodesStateWidth - 16), nodesTextY, rowSize, Colors.RAYWHITE);
 
 		string distanceLabel = "Render distance";
 		DrawText(distanceLabel.ptr, cast(int) panel.x + pauseInset, cast(int) panel.y + pauseLabelTop, rowSize, Colors.RAYWHITE);

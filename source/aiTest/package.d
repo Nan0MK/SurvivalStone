@@ -4,5 +4,7 @@ public import aiTest.check;
 public import aiTest.chunk;
 public import aiTest.camera;
 public import aiTest.frame;
+public import aiTest.quads;
+public import aiTest.terrain;
 public import aiTest.smooth;
 public import aiTest.view;

@@ -4,7 +4,7 @@ import std.math : sin, cos, sqrt;
 
 import raylib;
 
-import chunkSmooth;
+import terrainQuads;
 
 // Mouse look and WASD movement, written here. Not raylib's UpdateCamera.
 enum float lookSpeed = 0.0025f;
@@ -14,8 +14,9 @@ enum float debugFast = 8.0f;
 enum float pitchLimit = 1.5707f - 0.01f;
 // The camera sits this far above the feet. Spawn uses the same offset.
 enum float eyeHeight = 2.0f;
-enum float gravity = 24.0f;
-enum float jumpSpeed = 10.0f;
+// A jump rises jumpSpeed^2 / (2 * gravity), about 5.3, past a two-square cliff.
+enum float gravity = 96.0f;
+enum float jumpSpeed = 32.0f;
 // A rise taller than this blocks the step. Gentler ground is walked up.
 enum float stepHeight = 1.0f;
 
@@ -70,9 +71,9 @@ void moveLook(ref Vector3 position, float yaw, float forward, float strafe, floa
 	position.z += dz * step;
 }
 
-// Height of the ground under a point. Same function the marching cubes sample.
+// Height of the visible quad ground under a point.
 float surfaceAt(float x, float z) {
-	return groundHeightAt(x, z);
+	return quadHeightAt(x, z);
 }
 
 // Normal movement. WASD stays on the ground plane. Space jumps from the ground.

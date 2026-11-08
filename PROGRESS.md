@@ -73,3 +73,33 @@ Finer marching cubes. The player stays the same size.
 - Same day: that round hill was the wrong shape. `rangeWave` is a giant ledge: a steep climb of 300, a drop of 75 that is a little less steep, then a long slope back to the plain. A steep face of that shape stands just east of the spawn. Verified: `dub run --config=aiTest` prints `aiTest ok`. `dub build` succeeds.
 
 Unfinished: `Chunk2` face culling, still the author's fix when they ask. No digging, no day/night cycle, no mesh batcher, and no more materials unless they ask. The finer grid draws more triangles, so a frame is heavier. Leave that until they ask.
+
+## 2026-11-07
+
+Quad grid, first slice. Marching cubes stays in the tree and is not drawn.
+
+- `source/chunkQuads.d`: `GridQuad` stores four integer corners. `buildDemo` makes the octagon (axis walls and 45° walls that share vertical edges), a 45° ramp off the south wall, and a diagonal ramp that rises 1 across one diagonal step (about 35°) and shares the dot (5, 0, 1). Cardinal walls draw blue, 45° walls orange, the straight ramp green, the diagonal ramp yellow.
+- `source/app.d`: draws that demo from (3, 2, 9), looking north. Debug flight starts on. The `ChunkWorld` update and draw calls are commented out, not deleted.
+- `source/chunkSmooth.d`: unchanged.
+- `source/aiTest/quads.d`: checks the octagon dots, shared edges, outward wall normals, the 45° ramp, and the diagonal run. Wired through `package.d` and `run.d`.
+- Verified: `dub build` succeeds. `dub run --config=aiTest` prints `aiTest ok`.
+- Same day: every wall is a square of side 2. The old octagon used blue edges of length 2 and orange edges of length √2, one unit tall, so the corners were shorter rectangles. A 45° side of length 2 ends at √2 on x and z, so those corners are not integer dots. Corners are `float` now. Verified: `dub build` succeeds. `dub run --config=aiTest` prints `aiTest ok`.
+- Same day: both ramps are squares of side 2 at 45°. Rise and run are `wallSide / sqrt(2)`. The green ramp shares the whole south edge. The yellow ramp shares the whole northeast edge. The old green ramp rose 1 across a run of 1, and the old yellow ramp met the wall at one corner. Verified: `dub build` succeeds. `dub run --config=aiTest` prints `aiTest ok`.
+
+Unfinished: blocky hills, placing and removing quads, wall thickness, and feet that stand on these quads. Walking still uses `groundHeightAt`. `Chunk2` face culling is still the author's fix when they ask.
+
+- Same day: the window draws a blocky patch of the existing height instead of the octagon. `source/terrainQuads.d` samples `groundHeightAt` on a grid of `wallSide` and rounds each post to that step. A level cell is a flat square. Opposite edges one step apart are a 45° ramp across the whole cell, so that face is a rectangle. A taller step is a flat at the low height plus stacked vertical squares on the high edge, facing the low side. Corners that are not two level edges become one bent quad. `source/chunkQuads.d` stores a color on each quad and shades it with `shadeColor`. Dirt and rock still come from `terrainMaterial`. `source/app.d` builds a 32 by 32 cell patch from (64, −32), which is 64 units centered on the range face near x = 96. The camera sits 20 units south of that center and 18 above the ground there, looking north. Debug flight starts on. `ChunkWorld` stays commented out. `source/chunkSmooth.d` is unchanged. `buildDemo` is still in `chunkQuads.d` and is not drawn. Diagonal ramps are not on the hills. Verified: `dub build` succeeds. `dub run --config=aiTest` prints `aiTest ok`.
+
+Unfinished: one-step hill slopes are rectangles, not the wall squares. Diagonal hill slopes are not built. Placing and removing quads, wall thickness, and feet on these quads are still open. Walking still uses `groundHeightAt`. `Chunk2` face culling is still the author's fix when they ask.
+
+- Same day: the noise shuffle takes a seed. `buildPerm(seed)` and `setTerrainSeed` live in `source/chunkSmooth.d`. The game calls `setTerrainSeed(unpredictableSeed())` before it reads the ground, and prints that seed. The same seed rebuilds the same hills. The checks still start on `defaultTerrainSeed` (127) and put that seed back after they try another one. Verified: `dub build` succeeds. `dub run --config=aiTest` prints `aiTest ok`.
+
+Unfinished: one-step hill slopes are rectangles, not the wall squares. Diagonal hill slopes are not built. Placing and removing quads, wall thickness, and feet on these quads are still open. Walking still uses `groundHeightAt`. `Chunk2` face culling is still the author's fix when they ask. There is no way to type a seed back in.
+
+- Same day: the pause menu has a Nodes row. It starts off. `chunkNodes` lists the `wallSide` lattice of the 16-unit chunk that contains the camera, including the far face. `drawChunkNodes` draws each one with `DrawBillboard`, a white circle that faces the camera, pulled half a sprite toward the camera so a node on a quad stays visible. Verified: `dub build` succeeds. `dub run --config=aiTest` prints `aiTest ok`.
+
+Unfinished: one-step hill slopes are rectangles, not the wall squares. Diagonal hill slopes are not built. Placing and removing quads, wall thickness, and feet on these quads are still open. Walking still uses `groundHeightAt`. `Chunk2` face culling is still the author's fix when they ask. There is no way to type a seed back in. Nodes show one chunk, the one the camera is in.
+
+- Same day: walking stands on the visible quads. `surfaceAt` returns `quadHeightAt`. A flat cell and a cliff floor use the low quantized height. A one-step ramp slopes across the cell. A bent cell uses the same two triangles the mesh draws. `gravity` is 96 and `jumpSpeed` is 32, so a jump rises about 5.3, past a two-square cliff. `eyeHeight`, `stepHeight`, and `moveSpeed` stay 2, 1, and 4. Verified: `dub build` succeeds. `dub run --config=aiTest` prints `aiTest ok`.
+
+Unfinished: one-step hill slopes are rectangles, not the wall squares. Diagonal hill slopes are not built. Placing and removing quads, and wall thickness, are still open. `Chunk2` face culling is still the author's fix when they ask. There is no way to type a seed back in. Nodes show one chunk, the one the camera is in.
